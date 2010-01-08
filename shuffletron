@@ -1,0 +1,11 @@
+#!/bin/sh
+
+RLWRAP=`which rlwrap`
+
+if [ -z $RLWRAP ] ; then
+   echo "** Can't find rlwrap. It's recommended you install this, in order to"
+   echo "   have full command editing and history."
+   $0-bin
+else
+   rlwrap $0-bin
+fi
