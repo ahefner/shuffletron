@@ -36,6 +36,14 @@
   `(let ((cffi:*default-foreign-encoding* :iso-8859-1))
     ,@body))
 
+(defun find-type-via-stat (path name)
+  ;; Call stat, map back to d_type form since that's what we expect.
+  (let ((mode (osicat-posix:stat-mode (osicat-posix:stat (dfn path name)))))
+    (cond
+      ((osicat-posix:s-isdir mode) osicat-posix:dt-dir)
+      ((osicat-posix:s-isreg mode) osicat-posix:dt-reg)
+      (t osicat-posix:dt-unknown))))
+
 (defun %split-list-directory (path)
   (with-posix-interface ()
     (let ((dir (osicat-posix:opendir path))
@@ -45,6 +53,8 @@
             (multiple-value-bind (name type) (osicat-posix:readdir dir)
               ;; FIXME: Some OSes (and ancient glibc versions) don't
               ;; support d_type. Fall back to stat in that case.
+              (when (and name (eql type osicat-posix:dt-unknown))
+                (setf type (find-type-via-stat path name)))
               (cond
                 ((null name) (return-from %split-list-directory (values dirs files)))
                 ((eql type osicat-posix:dt-dir) (push name dirs))
@@ -145,6 +155,8 @@
   (not (mismatch filename "mp3" :test #'char-equal :start1 (- (length filename) 3))))
 
 (defvar *library-progress* 0)
+
+(defun emptyp (seq) (or (null seq) (zerop (length seq))))
 
 (defun smash-string (string)
   (substitute #\Space #\_ (string-downcase string)))
@@ -419,6 +431,7 @@
 (defun query (substring) (do-query substring nil))
 
 ;;; Lock discipline: If you need both locks, take the playqueue lock first.
+;;; This locking business is very dodgy.
 
 (defvar *cslock* (bordeaux-threads:make-lock "current stream lock"))
 (defvar *i-took-the-cs-look* nil)
@@ -690,6 +703,7 @@ pairs as cons cells."
   #+ccl (ccl:quit))
 
 (defun getline ()  
+  (finish-output *standard-output*)
   (or (read-line *standard-input* nil) (quit)))
 
 (defun init ()
@@ -703,7 +717,7 @@ pairs as cons cells."
         (when (not (library-scan *library-base*))
           (format t "Unable to scan \"~A\"~%" *library-base*)
           (setf *library-base* nil))
-        (when (zerop (length *library*))
+        (when (emptyp *library*)
           (format t "No playable files found in \"~A\"~%" *library-base*)
           (setf *library-base* nil))
         until *library-base*)
@@ -722,7 +736,7 @@ type \"scanid3\". It may take a moment.~%"
                (songs-needing-id3-scan)))      
       (t (scan-id3-tags :verbose t :adjective "new ")))))
 
-(defun sgr (modes) (format t "~C[~{~D~^;~}m" #\Esc modes))   
+(defun sgr (modes) (format t "~C[~{~D~^;~}m" #\Esc modes))
 
 (defun print-decorated (style-0 style-1 string markings style)
   (loop for char across string
@@ -827,12 +841,12 @@ type \"scanid3\". It may take a moment.~%"
         (terpri)))
 
 (defun show-current-query ()
-  (if (zerop (length *selection*))
+  (if (emptyp *selection*)
       (format t "  Nothing matches the current query.~%")
       (show-song-matches *selection* :mode :query :highlight-queue t)))
 
 (defun vector-select-ranges (vector rangespec)
-  (if (zerop (length vector))
+  (if (emptyp vector)
       (vector)
       (extract-ranges vector rangespec)))
 
@@ -893,7 +907,7 @@ type \"scanid3\". It may take a moment.~%"
 (defun show-playqueue ()
   (with-playqueue ()
     (cond
-      ((zerop (length *playqueue*))
+      ((emptyp *playqueue*)
        (format t "The queue is empty.~%"))
       (t (show-song-matches (coerce *playqueue* 'vector)
                             :mode :list :highlight-queue nil)))
@@ -932,6 +946,7 @@ type \"scanid3\". It may take a moment.~%"
                                   (assert (file-position in ,start))
                                   (parsing (,string) ,branch))))))))
 
+;;; Parser result value: parse succeeds only when non-NIL.
 (defun val (x) (or x (throw 'fail nil)))
 
 ;;; Lexical elements:
@@ -1010,9 +1025,10 @@ clock. Returns time in minutes from midnight."
   (multiple-value-bind (second minute hour date month year day)
       (decode-universal-time utime)
     (declare (ignore second))
+    (print month)
     (format nil "~A ~A ~D ~D:~2,'0D ~A ~D"
             (nth day '("Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun"))
-            (nth month '("Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Nov" "Dec"))
+            (nth (1- month) '("Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec"))
             date
             (1+ (mod (1- hour) 12))
              minute
@@ -1076,8 +1092,6 @@ rather than today if the date would be less than the current time."
 
 (defvar *alarm-thread* nil)
 
-(defun random-song () (alexandria:random-elt *library*))
-
 (defun trigger-alarm ()
   ;; When the alarm goes off, unpause the player if it's paused. If it
   ;; isn't paused but there are songs in the queue, play the next
@@ -1086,8 +1100,8 @@ rather than today if the date would be less than the current time."
   (setf *wakeup-time* nil)
   (unless (unpause)
     (with-playqueue ()
-      (unless *playqueue* 
-        (loop repeat 10 do (push (random-song) *playqueue*))))
+      (unless (or *playqueue* (emptyp *library*))
+        (loop repeat 10 do (push (alexandria:random-elt *library*) *playqueue*))))
     (play-next-song)))
 
 (defun alarm-thread-toplevel ()
@@ -1224,7 +1238,7 @@ Command list:
   [songs]        Play list of songs.
   +[songs]       Append list of songs to queue.
   pre[songs]     Prepend list of songs to queue.
-  random         Play a random song from the library.
+  random         Play a random song from the current selection.
   random QUERY   Play a random song matching QUERY
 
   queue          Print queue contents and current song playing.
@@ -1352,7 +1366,7 @@ already playing will be interrupted by the next song in the queue.
         (args    (and sepidx (string-trim " " (subseq line sepidx)))))
   (cond
     ;; A blank input line resets the query set.
-    ((zerop (length line)) (reset-query))
+    ((emptyp line) (reset-query))
 
     ;; Lisp evaluation
     ((and *eval-support* (string= command "eval"))
@@ -1442,14 +1456,17 @@ already playing will be interrupted by the next song in the queue.
 
     ;; Random
     ((string= line "random")
-     (play-song (random-song))
+     (cond
+       ((emptyp *library*)
+        (format t "The library is empty.~%"))
+       (t (play-song (alexandria:random-elt (if (emptyp *selection*) *library* *selection*)))))
      (show-current-song))
 
     ;; Random from query
     ((string= command "random")
      (let ((matches (query args)))
        (cond
-         ((zerop (length matches))
+         ((emptyp matches) 
           (format t "No songs match query.~%"))
          (t (play-song (alexandria:random-elt matches))
             (show-current-song)))))
