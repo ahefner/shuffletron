@@ -1,0 +1,6 @@
+* Changes in Shuffletron 0.0.3 relative to Shuffletron 0.0.2:
+** Binaries might really work this time
+** New commands: killtag, qdrop, qtag, fromqueue, toqueue, random, stop, play
+
+* Shuffletron 0.0.2:
+** First public release

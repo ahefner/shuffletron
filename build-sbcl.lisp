@@ -1,11 +1,18 @@
 (in-package :cl-user)
 
 (load "shuffletron.asd")
+
 (asdf:oos 'asdf:compile-op :shuffletron)
 (asdf:oos 'asdf:load-op :shuffletron)
 
+;;; Don't need this nonsense:
+(sb-alien:unload-shared-object "librt.so")
+(sb-alien:unload-shared-object "librt.so.1")
+
+;;(print sb-sys:*shared-objects*)
+
 (sb-ext:save-lisp-and-die "shuffletron-bin"
                           :executable t
-                          :save-runtime-options t
-                          :toplevel #'shuffletron:run)
+                          :toplevel #'shuffletron:run
+                          :save-runtime-options t)
 

@@ -28,6 +28,8 @@
 
 (in-package :shuffletron)
 
+(defparameter *shuffletron-version* "0.0.3")
+
 ;;;; POSIX directory walker
 
 (defmacro with-posix-interface (() &body body)
@@ -126,12 +128,6 @@
   (ensure-directories-exist (prefpath name))
   (setf (file (prefpath name)) value))
 
-(defun quit ()
-  (format t "Bye.~%")
-  (finish-output)  
-  #+sbcl (sb-ext:quit)
-  #+ccl (ccl:quit))
-
 ;;;; Library
 
 (defvar *library* nil)
@@ -146,7 +142,7 @@
 (defun mp3-p (filename)
   (not (mismatch filename "mp3" :test #'char-equal :start1 (- (length filename) 3))))
 
-(defvar *library-progress*)
+(defvar *library-progress* 0)
 
 (defun smash-string (string)
   (substitute #\Space #\_ (string-downcase string)))
@@ -173,8 +169,8 @@
       (walk path
             (lambda (filename)
               (when (mp3-p filename)
-                (add-mp3-file filename (rel path filename))))))    
-    t))
+                (add-mp3-file filename (rel path filename)))))
+      t)))
 
 (defun songs-needing-id3-scan () (count-if-not #'song-id3-p *library*))
 
@@ -205,13 +201,14 @@
           (format t "Reading ~Atags: ~:D of ~:D" (or adjective "") n pending)
           (force-output))
         (setf (song-id3 song) (mpg123:get-tags-from-file (song-full-path song) :no-utf8 t)
+              (song-matchprops song) nil
               (song-id3-p song) t)
         finally 
         (when (and pending (not (zerop pending))) (terpri)))
   (save-id3-cache))
 
-(defun build-sequence-table (seq &optional (key #'identity))
-  (let ((table (make-hash-table)))
+(defun build-sequence-table (seq &optional (key #'identity) (test #'equal))
+  (let ((table (make-hash-table :test test)))
     (map nil (lambda (elt) (setf (gethash (funcall key elt) table) elt)) seq)
     table))
 
@@ -311,6 +308,7 @@
     (save-tags-list tag)))
 
 (defun untag-song (song tag)
+  (load-tags)
   (when (member tag (song-tags song) :test #'string=)
     (setf (song-tags song) (delete tag (song-tags song) :test #'string=))
     (save-tags-list tag)))
@@ -357,7 +355,7 @@
   (let ((syms (loop repeat (length forms) collect (gensym "ANY"))))
     `((lambda ,syms (or ,@syms)) ,@forms)))
 
-(defun refine-query (substring)
+(defun do-query (substring update-highlighting)
   (declare (optimize (speed 3)))
   ;; Query and update highlighting:
   (loop for song across *selection*
@@ -381,23 +379,24 @@
                    (if (eql keyword :filename)
                        (setf found (search query searchable))
                        (setf found (search query searchable :key #'char-downcase))))
-                 ;; FIXME: In the case of an ID3 field changing
-                 ;; (particularly in length) and being rescanned, the
-                 ;; markings vector of files in the selection will be
-                 ;; wrong.
-                 (when found
+                 (when (and found update-highlighting)
                    (setf (getf (song-matchprops song) keyword)
-                         (fill (or (getf (song-matchprops song) keyword)
-                                   (make-array (length string) :element-type 'bit))
-                               1 :start found :end (+ found (length substring))))
-                   t))))
+                         (fill (the (simple-array bit 1)
+                                 (or (getf (song-matchprops song) keyword)
+                                     (make-array (length string) :element-type 'bit)))
+                               1 :start found :end (+ found (length query)))))
+                 found)))
           (when (any (field :filename)
                      (field :artist)
                      (field :album)
                      (field :title))
             (vector-push-extend song new-selection)))
+        finally (return new-selection)))
 
-        finally (set-selection new-selection)))
+(defun refine-query (substring)
+  (set-selection (do-query substring t)))
+
+(defun query (substring) (do-query substring nil))
 
 ;;; Lock discipline: If you need both locks, take the playqueue lock first.
 
@@ -434,7 +433,7 @@
 (defun play-song (song &key enqueue-on-completion)
   (with-stream-control ()
     (when *current-stream* (end-stream *current-stream*))
-    (let ((new (make-mp3-streamer (song-full-path song)                                  
+    (let ((new (make-mp3-streamer (song-full-path song)
                                   :class 'mp3-jukebox-streamer
                                   :song song
                                   :enqueue-on-completion enqueue-on-completion)))
@@ -494,6 +493,24 @@
         (cons current *playqueue*)
         *playqueue*)))
 
+(defun queue-remove-songs (songs)
+  (let ((set (build-sequence-table songs #'identity #'eq)))
+    (with-playqueue ()
+      (setf *playqueue*
+            (remove-if (lambda (song) (gethash song set)) *playqueue*)))))
+
+(defun queue-remove-indices (indices)
+  (with-playqueue ()
+    (setf *playqueue* (list-remove-by-index *playqueue* indices))))
+
+(defun list-remove-by-index (list indices)
+  (loop with seq = list
+        with list = (sort (remove-duplicates indices) #'<)
+        for index upfrom 0
+        for song in seq
+        unless (and (eql index (car list)) (pop list))
+        collect song))
+
 ;;;; Tagging UI
 
 (defun item-list-delim (char) (or (char= char #\Space) (char= char #\,)))
@@ -538,6 +555,17 @@
     (if song
         (dolist (tag tags) (untag-song song tag))
         (format t "No song is playing.~%"))))
+
+(defun kill-tag (tag)  
+  (loop for song across *library*
+        with num-killed = 0
+        do
+        (when (find tag (song-tags song) :test #'string=)
+          (setf (song-tags song) (delete tag (song-tags song) :test #'string=))
+          (incf num-killed))
+        finally (format t "Removed ~:D occurrence~P of ~A~%" 
+                        num-killed num-killed (decode-tag-name tag)))
+  (save-tags-list tag))
 
 (defun show-all-tags ()
   (let* ((all-tags (loop for song across *selection* appending (song-tags song)))
@@ -623,12 +651,18 @@ pairs as cons cells."
     (sb-sys:enable-interrupt sb-unix:sigint 
       (lambda (&rest args) (declare (ignore args)) (sb-ext:quit)))))
 
+(defun quit ()
+  (format t "Bye.~%")
+  (finish-output)  
+  #+sbcl (sb-ext:quit)
+  #+ccl (ccl:quit))
+
 (defun getline ()
   (finish-output *standard-output*)
   (or (read-line *standard-input* nil) (quit)))
 
 (defun init ()
-  (format t "~&This is Shuffletron.~%")
+  (format t "~&This is Shuffletron ~A~%" *shuffletron-version*)
   (setf *random-state* (make-random-state t))
   (loop do
         (init-library)
@@ -766,10 +800,13 @@ type \"scanid3\". It may take a moment.~%"
       (format t "  Nothing matches the current query.~%")
       (show-song-matches *selection* :mode :query :highlight-queue t)))
 
-(defun selection-songs (rangespec)
-  (if (zerop (length *selection*))
+(defun vector-select-ranges (vector rangespec)
+  (if (zerop (length vector))
       (vector)
-      (extract-ranges *selection* rangespec)))
+      (extract-ranges vector rangespec)))
+
+(defun selection-songs (rangespec)
+  (vector-select-ranges *selection* rangespec))
 
 (defun time->string (seconds)
   (setf seconds (round seconds))
@@ -780,7 +817,7 @@ type \"scanid3\". It may take a moment.~%"
 (defun print-id3-properties (stream props)
   (when (getf props :title)
     (format stream "  Title: ~A" (getf props :title)))
-  (let* ((line-length 77)
+  (let* ((line-length 76)
          (remaining 0))    
     (labels ((show (fmt &rest args)
                (let ((string (apply #'format nil fmt args)))
@@ -824,10 +861,21 @@ type \"scanid3\". It may take a moment.~%"
     (cond
       ((zerop (length *playqueue*))
        (format t "The queue is empty.~%"))
-      (t (show-song-matches (coerce *playqueue* 'vector) 
+      (t (show-song-matches (coerce *playqueue* 'vector)
                             :mode :list :highlight-queue nil)))
     (when *loop-mode* (format t "Loop mode enabled.~%"))
     (show-current-song t)))
+
+(defun stop-command ()
+  (with-playqueue ()
+    (with-stream-control ()
+      (when *current-stream*
+        (push (song-of *current-stream*) *playqueue*)
+        (end-stream *current-stream*)))))
+
+(defun play-command ()
+  (unless (unpause)
+    (or (current-song-playing) (play-next-song))))
 
 ;;; Awful anaphora in these parsing macros, they often assume IN
 ;;; is the name of the stream variable.
@@ -852,6 +900,8 @@ type \"scanid3\". It may take a moment.~%"
 
 (defun val (x) (or x (throw 'fail nil)))
 
+;;; Lexical elements:
+
 (defun num (in)
   (loop with accum = nil
         as next = (peek-char nil in nil)
@@ -867,6 +917,8 @@ type \"scanid3\". It may take a moment.~%"
 (defun whitespace (in) (val (peek-char t in nil)))
 (defun match (in match)
   (every (lambda (x) (val (char-equal x (val (read-char in nil))))) match))
+
+;;; Time parsers:
 
 (defun parse-timespec (string)
   "Parse a time/duration, in one of three formats (seconds, m:ss, h:mm:ss)"
@@ -1001,7 +1053,7 @@ rather than today if the date would be less than the current time."
   (setf *wakeup-time* nil)
   (unless (unpause)
     (with-playqueue ()
-      (unless *playqueue*
+      (unless *playqueue* 
         (loop repeat 10 do (push (random-song) *playqueue*))))
     (play-next-song)))
 
@@ -1130,36 +1182,47 @@ Additional help topics:
   (format t "
 Command list:
 
-  /[query]      Search library for [query].
-  show          Print search matches, highlighting songs in queue.
-  back          Undo last search.
-  [songs]       Play list of songs.
-  +[songs]      Append list of songs to queue.
-  pre[songs]    Prepend list of songs to queue.
-  queue         Print queue contents and current song playing.
-  shuffle       Randomize order of songs in queue.
-  clear         Clear the queue (current song continues playing)
-  loop          Toggle loop mode (loop through songs in queue)
+  /[query]       Search library for [query].
+  show           Print search matches, highlighting songs in queue.
+  back           Undo last search.
+  [songs]        Play list of songs.
+  +[songs]       Append list of songs to queue.
+  pre[songs]     Prepend list of songs to queue.
+  random         Play a random song from the library.
+  random [query] Play a random song matching [query]
 
-  now           Print name of song currently playing.
-  pause         Toggle paused/unpaused.
-  skip          Skip currently playing song.
-  repeat [N]    Add N repetitions of currently playing song to head of queue.
-  seek [time]   Seek to time (in [h:]m:ss format, or a number in seconds)
+  queue          Print queue contents and current song playing.
+  shuffle        Randomize order of songs in queue.
+  clear          Clear the queue (current song continues playing)
+  loop           Toggle loop mode (loop through songs in queue)
+  qdrop          Remove last song from queue
+  qdrop [ranges] Remove songs from queue
+  qtag [tags]    Apply tags to all songs in queue
+  fromqueue      Transfer queue to selection
+  toqueue        Replace queue with selection
 
-  tag           List tags of currently playing song.
-  tag [tags]    Add one or more textual tags to the current song.
-  untag [tags]  Remove the given tags from the currently playing song.
-  tagged [tags] Search for files having any of specified tags.
-  tags          List all tags (and # occurrences) within current query.
+  now            Print name of song currently playing.
+  play           Resume playing
+  stop           Stop playing (current song pushed to head of queue)
+  pause          Toggle paused/unpaused.
+  skip           Skip currently playing song.
+  repeat [N]     Add N repetitions of currently playing song to head of queue.
+  seek [time]    Seek to time (in [h:]m:ss format, or a number in seconds)
 
-  time          Print current time
-  alarm         Set alarm.
+  tag            List tags of currently playing song.
+  tag [tags]     Add one or more textual tags to the current song.
+  untag [tags]   Remove the given tags from the currently playing song.
+  tagged [tags]  Search for files having any of specified tags.
+  tags           List all tags (and # occurrences) within current query.
+  killtag [tags] Remove all occurances of the given tags
+
+  time           Print current time
+  alarm          Set alarm.
   
-  scanid3       Scan new files for ID3 tags (this can take a while)
-  exit          Exit the program.
+  scanid3        Scan new files for ID3 tags (this can take a while)
+  exit           Exit the program.
   
-  help [topic]  Help
+  help [topic]   Help
 "))
 
 (defun print-examples ()
@@ -1297,11 +1360,30 @@ already playing will be interrupted by the next song in the queue.
     ;; Pause playback
     ((string= line "pause") (toggle-pause))
 
+    ;; Stop
+    ((string= line "stop")
+     (stop-command))
+
+    ;; Play
+    ((string= line "play")
+     (play-command))
+
     ;; Seek
     ((string= command "seek") (do-seek args))
 
-    ;; Stop
-    ;; Play?
+    ;; Random
+    ((string= line "random")
+     (play-song (random-song))
+     (show-current-song))
+
+    ;; Random from query
+    ((string= command "random")
+     (let ((matches (query args)))
+       (cond
+         ((zerop (length matches))
+          (format t "No songs match query.~%"))
+         (t (play-song (alexandria:random-elt matches))
+            (show-current-song)))))
 
     ;; Show playqueue
     ((string= line "queue") (show-playqueue))
@@ -1333,10 +1415,41 @@ already playing will be interrupted by the next song in the queue.
      (load-tags)
      (show-all-tags))
 
+    ;; Remove all occurances of tag(s)
+    ((string= command "killtag")
+     (load-tags)
+     (map nil #'kill-tag (parse-tag-list args)))
+
     ;; Clear the queue
     ((string= line "clear")
      (with-playqueue ()
        (setf *playqueue* nil)))
+
+    ;; Remove songs from the queue
+    ((string= line "qdrop")
+     (queue-remove-indices (list (1- (length *playqueue*)))))
+
+    ((string= command "qdrop")
+     (queue-remove-indices
+      (expand-ranges (parse-ranges args 0 (1- (length *playqueue*))))))
+
+    ;; Tag all songs in queue
+    ((string= command "qtag")
+     (with-playqueue ()
+       (dolist (tag (parse-tag-list args))
+         (dolist (song *playqueue*)
+           (tag-song song tag)))
+       (format t "Tagged ~:D songs in queue: ~{~A~^, ~}~%" 
+               (length *playqueue*) (mapcar #'decode-tag-name (parse-tag-list args)))))
+
+    ;; Queue to selection
+    ((string= line "fromqueue")
+     (set-selection (coerce *playqueue* 'vector)))
+
+    ;; Selection to queue
+    ((string= line "toqueue")
+     (with-playqueue ()
+       (setf *playqueue* (coerce *selection* 'list))))
 
     ;; Randomize queue
     ((string= line "shuffle")
@@ -1398,7 +1511,7 @@ already playing will be interrupted by the next song in the queue.
      (loop for song across *library* do (setf (song-id3-p song) nil))
      (scan-id3-tags :verbose t))
 
-    ;; Attempt to start swank server, for debugging.
+    ;; Attempt to start swank server, for development.
     ((string= line "swankme") 
      ;; Work around an SBCL feature(?) in embedded cores:
      #+SBCL (cffi:foreign-funcall "setenv" :string "SBCL_HOME" :string "/usr/local/lib/sbcl/" :int 0 :int)

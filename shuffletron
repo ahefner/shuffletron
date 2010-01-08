@@ -2,6 +2,12 @@
 
 RLWRAP=`which rlwrap`
 
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib/shuffletron
+
+if [ -r `dirname $0`/libmixalot-mpg123.so.0 ] ; then
+    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:.
+fi
+
 if [ -z $RLWRAP ] ; then
    echo "** Can't find rlwrap. It's recommended you install this, in order to"
    echo "   have full command editing and history."
