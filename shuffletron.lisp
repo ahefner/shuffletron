@@ -28,7 +28,7 @@
 
 (in-package :shuffletron)
 
-(defparameter *shuffletron-version* "0.0.4")
+(defparameter *shuffletron-version* "0.0.5")
 
 ;;;; POSIX directory walker
 
@@ -123,6 +123,8 @@
     (reader-error (c)
       (format t "Error parsing contents of ~A:~%~A~%" (prefpath name) c)
       (values default nil))))
+
+(defstruct cached-pref value write-date)
 
 (defun (setf pref) (value name)
   (ensure-directories-exist (prefpath name))
@@ -220,9 +222,11 @@
 ;;; tags with forward slashes without getting screwed by the filesystem,
 ;;; and a tag named by a single asterisk without getting screwed by CCL.
 
-(defun tag-unescaped-char-p (character) (alpha-char-p character))
+(defun tag-unescaped-char-p (character)
+  (or (<= 65 (char-code character) 90)
+      (<= 97 (char-code character) 122)))
 
-(defun decode-tag-name (string)
+(defun decode-as-filename (string)
   (with-input-from-string (in string)
     (with-output-to-string (out)
       (loop as next = (peek-char nil in nil)
@@ -235,7 +239,7 @@
                                out))
                   (t (write-char (read-char in) out)))))))
 
-(defun encode-tag-name (string)
+(defun encode-as-filename (string)
   (with-input-from-string (in string)
     (with-output-to-string (out)
       (loop as next = (peek-char nil in nil)
@@ -246,7 +250,7 @@
                      (write-char (digit-char (ldb (byte 4 4) (char-code next)) 16) out)
                      (write-char (digit-char (ldb (byte 4 0) (char-code next)) 16) out)))))))
 
-(defun list-tag-files () 
+(defun list-tag-files ()
   (directory (merge-pathnames (make-pathname :name :wild)
                               (prefpath '("tag" nil)))))
 
@@ -263,7 +267,7 @@
 (defun tag-file-dirty-p (tag)
   (tag-pathname-dirty-p (prefpath (list "tag" tag))))
 
-(defun dirty-tag-pathnames () 
+(defun dirty-tag-pathnames ()
   (remove-if-not #'tag-pathname-dirty-p (list-tag-files)))
 
 (defun dirty-tags ()
@@ -314,6 +318,17 @@
     (setf (song-tags song) (delete tag (song-tags song) :test #'string=))
     (save-tags-list tag)))
 
+;;; Song start times
+
+(defun song-start-prefname (song)
+  (list "start-time" (encode-as-filename (song-local-path song))))
+
+(defun song-start-time (song)
+  (pref (song-start-prefname song)))
+
+(defun (setf song-start-time) (time song)
+  (setf (pref (song-start-prefname song)) time))
+
 ;;;; Audio
 
 (defvar *mixer* nil)
@@ -331,6 +346,10 @@
 ;;;; State
 
 (defvar *debug-mode* nil)
+
+(defvar *eval-support* 'smart
+  "Whether Lisp evaluation from the Shuffletron prompt is allowed.
+  May be NIL, T or 'SMART.")
 
 (defvar *selection* nil)
 (defvar *selection-changed* nil)
@@ -429,7 +448,8 @@
   ;; TODO: Fade out nicely.
   (setf (stopped stream) t)
   (mixer-remove-streamer *mixer* stream)
-  (setf *current-stream* nil))
+  (setf *current-stream* nil)
+  (update-status-bar))
 
 (defun play-song (song &key enqueue-on-completion)
   (with-stream-control ()
@@ -437,9 +457,14 @@
     (let ((new (make-mp3-streamer (song-full-path song)
                                   :class 'mp3-jukebox-streamer
                                   :song song
-                                  :enqueue-on-completion enqueue-on-completion)))
+                                  :enqueue-on-completion enqueue-on-completion))
+          (start-at (song-start-time song)))
       (setf *current-stream* new)
-      (mixer-add-streamer *mixer* *current-stream*))))
+      (mixer-add-streamer *mixer* *current-stream*)
+      (when start-at 
+        ;; Oh, look, another race. Great API I have here.
+        (streamer-seek new *mixer* (* start-at (mixer-rate *mixer*))))))
+  (update-status-bar))
 
 (defun play-next-song ()
   (with-playqueue ()
@@ -525,14 +550,14 @@
          (and item (cons item (parse-item-list string iend)))))))
 
 (defun parse-tag-list (tags-arg)
-  (mapcar #'encode-tag-name (parse-item-list tags-arg 0)))
+  (mapcar #'encode-as-filename (parse-item-list tags-arg 0)))
 
 (defun show-song-tags (song &key (no-tags-fmt ""))
   (load-tags)
   (cond 
     ((not song) (format t "No song is playing.~%"))
     ((song-tags song) (format t "Tagged: ~{~A~^, ~}~%" 
-                              (mapcar #'decode-tag-name (song-tags song))))
+                              (mapcar #'decode-as-filename (song-tags song))))
     (t (format t no-tags-fmt))))
 
 (defun show-current-song-tags ()
@@ -565,7 +590,7 @@
           (setf (song-tags song) (delete tag (song-tags song) :test #'string=))
           (incf num-killed))
         finally (format t "Removed ~:D occurrence~P of ~A~%" 
-                        num-killed num-killed (decode-tag-name tag)))
+                        num-killed num-killed (decode-as-filename tag)))
   (save-tags-list tag))
 
 (defun show-all-tags ()
@@ -581,12 +606,18 @@
     (format t "All tags in ~A: ~{~A~^, ~}~%" 
             (if (querying-library-p) "library" "query")
             (loop for tag in no-dups
-                  as printable = (decode-tag-name tag)
+                  as printable = (decode-as-filename tag)
                   as count = (gethash tag counts)
                   if (= 1 count) collect printable
                   else collect (format nil "~A(~A)" printable count)))))
 
 ;;;; UI
+
+;;; Temporal coupling ==> Recursive lock as workaround ==> Interesting.
+(defvar *output-lock* (bordeaux-threads:make-recursive-lock "Output Lock"))
+(defmacro with-output (() &body body)
+  `(bordeaux-threads:with-recursive-lock-held (*output-lock*)
+     ,@body))
 
 (defvar *term-rows* 80)
 (defvar *term-cols* 25)
@@ -607,7 +638,7 @@
           *term-cols* (or cols *term-cols*))))
 
 (defparameter *max-query-results* 50
-  "Maximum number of resuls to print without an explicit 'show' command.")
+  "Maximum number of results to print without an explicit 'show' command.")
 
 (defun parse-ranges (string start max)
   "Parse comma delimited numeric ranges, returning a list of min/max
@@ -658,8 +689,7 @@ pairs as cons cells."
   #+sbcl (sb-ext:quit)
   #+ccl (ccl:quit))
 
-(defun getline ()
-  (finish-output *standard-output*)
+(defun getline ()  
   (or (read-line *standard-input* nil) (quit)))
 
 (defun init ()
@@ -841,7 +871,8 @@ type \"scanid3\". It may take a moment.~%"
 
 (defun show-current-song (&optional delimit)
   (let* ((current *current-stream*)
-         (song (and current (song-of current))))
+         (song (and current (song-of current)))
+         (start-time (and song (song-start-time song))))
     (when current
       (when delimit (terpri))
       (let ((pos (streamer-position current *mixer*))
@@ -854,7 +885,9 @@ type \"scanid3\". It may take a moment.~%"
                     "Playing:")
                 (song-local-path song)))
       (print-id3-properties *standard-output* (song-id3 song))
-      (show-song-tags song)
+      (when start-time
+        (format t "Start time is set to ~A~%" (time->string start-time)))
+      (show-song-tags song)      
       (when delimit (terpri)))))
 
 (defun show-playqueue ()
@@ -1043,8 +1076,7 @@ rather than today if the date would be less than the current time."
 
 (defvar *alarm-thread* nil)
 
-(defun random-song ()
-  (aref *library* (random (length *library*))))
+(defun random-song () (alexandria:random-elt *library*))
 
 (defun trigger-alarm ()
   ;; When the alarm goes off, unpause the player if it's paused. If it
@@ -1060,12 +1092,15 @@ rather than today if the date would be less than the current time."
 
 (defun alarm-thread-toplevel ()
   (unwind-protect
-       (loop as wakeup = *wakeup-time*
+       (loop with interval = 60
+             as wakeup = *wakeup-time*
              as remaining = (and wakeup (- wakeup (get-universal-time))) 
-             do (cond
-                  ((null wakeup) (sleep 60))
-                  ((<= remaining 0) (trigger-alarm))
-                  (t (sleep (min remaining 60)))))
+             do
+             (cond
+               ((null wakeup) (sleep interval))
+               ((<= remaining 0) (trigger-alarm))
+               (t (sleep (min remaining interval))
+                  (update-status-bar))))
     (setf *alarm-thread* nil)))
 
 (defun set-alarm (utime)
@@ -1190,15 +1225,15 @@ Command list:
   +[songs]       Append list of songs to queue.
   pre[songs]     Prepend list of songs to queue.
   random         Play a random song from the library.
-  random [query] Play a random song matching [query]
+  random QUERY   Play a random song matching QUERY
 
   queue          Print queue contents and current song playing.
   shuffle        Randomize order of songs in queue.
   clear          Clear the queue (current song continues playing)
   loop           Toggle loop mode (loop through songs in queue)
   qdrop          Remove last song from queue
-  qdrop [ranges] Remove songs from queue
-  qtag [tags]    Apply tags to all songs in queue
+  qdrop RANGES   Remove songs from queue
+  qtag TAGS      Apply tags to all songs in queue
   fromqueue      Transfer queue to selection
   toqueue        Replace queue with selection
 
@@ -1207,15 +1242,16 @@ Command list:
   stop           Stop playing (current song pushed to head of queue)
   pause          Toggle paused/unpaused.
   skip           Skip currently playing song.
-  repeat [N]     Add N repetitions of currently playing song to head of queue.
-  seek [time]    Seek to time (in [h:]m:ss format, or a number in seconds)
+  repeat N       Add N repetitions of currently playing song to head of queue.
+  seek TIME      Seek to time (in [h:]m:ss format, or a number in seconds)
+  startat TIME   Always start playback at a given time (to skip long intros)
 
   tag            List tags of currently playing song.
-  tag [tags]     Add one or more textual tags to the current song.
-  untag [tags]   Remove the given tags from the currently playing song.
-  tagged [tags]  Search for files having any of specified tags.
+  tag TAGS       Add one or more textual tags to the current song.
+  untag TAGS     Remove the given tags from the currently playing song.
+  tagged TAGS    Search for files having any of specified tags.
   tags           List all tags (and # occurrences) within current query.
-  killtag [tags] Remove all occurances of the given tags
+  killtag TAGS   Remove all occurances of the given tags
 
   time           Print current time
   alarm          Set alarm.
@@ -1302,6 +1338,14 @@ If the player is already playing when the alarm goes off, the song
 already playing will be interrupted by the next song in the queue.
 "))
 
+(defun eval* (string)
+  "Read a form from STRING, evaluate it in the Shuffletron
+  package and print the result."
+     (print (eval `(progn
+                     (in-package ,(package-name #.*package*))
+                     ,(read-from-string string))))
+     (terpri))
+
 (defun parse-and-execute (line) 
  (let* ((sepidx (position #\Space line))
         (command (subseq line 0 sepidx))
@@ -1309,6 +1353,13 @@ already playing will be interrupted by the next song in the queue.
   (cond
     ;; A blank input line resets the query set.
     ((zerop (length line)) (reset-query))
+
+    ;; Lisp evaluation
+    ((and *eval-support* (string= command "eval"))
+     (eval* args))
+
+    ((and (eq *eval-support* 'smart) (equal (subseq line 0 1) "("))
+     (eval* line))
 
     ;; Back (restore previous selection)
     ((string= line "back")
@@ -1359,7 +1410,9 @@ already playing will be interrupted by the next song in the queue.
      (show-current-song))
 
     ;; Pause playback
-    ((string= line "pause") (toggle-pause))
+    ((string= line "pause") 
+     (toggle-pause)
+     (update-status-bar))
 
     ;; Stop
     ((string= line "stop")
@@ -1371,6 +1424,21 @@ already playing will be interrupted by the next song in the queue.
 
     ;; Seek
     ((string= command "seek") (do-seek args))
+
+    ;; Start at
+    ((string= command "startat")
+     (let* ((time (and args (parse-timespec args)))
+            (playing (current-song-playing))
+            (cur-start (and playing (song-start-time playing))))
+       (cond
+         ((and cur-start (null time))
+          (format t "Start time for the current song is ~A~%" 
+                  (time->string cur-start)))
+         ((and playing (null time))
+          (format t "No start time for this song is set.~%"))
+         ((not playing) (format t "No song is playing.~%"))
+         ((null time) (format t "Set start time to when?~%"))         
+         (t (setf (song-start-time playing) time)))))
 
     ;; Random
     ((string= line "random")
@@ -1441,7 +1509,7 @@ already playing will be interrupted by the next song in the queue.
          (dolist (song *playqueue*)
            (tag-song song tag)))
        (format t "Tagged ~:D songs in queue: ~{~A~^, ~}~%" 
-               (length *playqueue*) (mapcar #'decode-tag-name (parse-tag-list args)))))
+               (length *playqueue*) (mapcar #'decode-as-filename (parse-tag-list args)))))
 
     ;; Queue to selection
     ((string= line "fromqueue")
@@ -1529,22 +1597,110 @@ already playing will be interrupted by the next song in the queue.
    (when (and *selection-changed* (<= (length *selection*) *max-query-results*))
      (show-current-query))
    (setf *selection-changed* nil)
+   ;;(update-status-bar)
    ;; Prompt
-   (format t "~A> " (if (querying-library-p) 
-                        "library" 
-                        (format nil "~:D matches" (length *selection*))))
-   (force-output)
+   (with-output ()
+     (format t "~A> " (if (querying-library-p) 
+                          "library" 
+                          (format nil "~:D matches" (length *selection*))))
+     (force-output))
    ;; Input
    (let ((line (getline)))
-     (flet ((cmd () (parse-and-execute (string-trim " " line))))
-       (update-terminal-size)
+     (flet ((cmd () 
+              (with-output ()
+                (update-terminal-size)
+                (parse-and-execute (string-trim " " line)))))
        (if *debug-mode*
            (cmd)
            (handler-case (cmd)
-             (error (c) (format t "~&Oops! ~A~%" c))))))))
+             (error (c) 
+               (with-output ()
+                 (format t "~&Oops! ~A~%" c)))))))))
 
 (defun run ()
   (spooky-init)
+  ;; Clear the screen first:
+  (format t "~C[2J~C[1;1H" #\Esc #\Esc)
   (init)
   (audio-init)
   (mainloop))
+
+;;;; Experimental status bar code:
+
+(defun save-cursor ()    (format t "~C[s" #\Esc))
+(defun restore-cursor () (format t "~C[u" #\Esc))
+
+(defun move-cursor (col row)
+  (format t "~C[~D;~DH" #\Esc row col))
+
+;;; Debugging cruft. There's a strange issue where the program freezes
+;;; in the call to finish-output for a number of seconds (10?  20?) if
+;;; the alarm thread attempts to redraw the status bar while the other
+;;; thread is doing output. I tried to use the output lock to protect
+;;; access to the terminal, but perhaps I missed something (or that
+;;; isn't the problem).
+
+(defvar *funcounter* 0)                 
+(defvar *waitcounter* 0)
+(defvar *donecounter* 0)
+
+(defun update-status-bar ()
+  (with-output ()
+    (save-cursor)
+    (update-terminal-size)
+    (format t "~C[~D;~Dr" #\Esc 2 *term-rows*) ; Set scrolling window
+    (format t "~C[6p" #\Esc)                   ; Hide cursor
+    (move-cursor 1 1)
+    (sgr '(44 97))
+    (format t "~C[0K" #\Esc)              ; Clear line (sort of, not really)
+    (let* ((count 1)
+           (wakeup *wakeup-time*)
+           (remaining (and wakeup (- wakeup (get-universal-time))))
+           (need-seperator wakeup))
+
+      (flet ((output (fmt &rest args)
+               (let* ((string (apply #'format nil fmt args))
+                      (nwrite (min (max 0 (- *term-cols* count))
+                                   (length string))))
+                 (incf count (length string))
+                 (write-string (subseq string 0 nwrite)))))
+        (cond
+          ((and wakeup (< remaining 3600))
+           (output "Alarm in ~D m" (round remaining 60)))
+          (wakeup
+           (output "Alarm in ~,1F hrs" (/ remaining 3600.0))))
+        
+        (let* ((stream *current-stream*)
+               (song (and stream (song-of stream))))
+          (when song
+            (when need-seperator (output " | "))
+            (let* ((id3 (song-id3 song))
+                   (artist (getf id3 :artist))
+                   (album (getf id3 :album))
+                   (title (getf id3 :title)))
+              (if (streamer-paused-p stream *mixer*)
+                  (output "Paused: ")
+                  (output "Playing: "))
+              (cond
+                ((and artist title)
+                 (output "\"~A\" by " title)
+                 (output "~A" artist)
+                 (when (and album (< (+ 4 (length album))
+                                     (- *term-cols* count)))
+                   (output " (~A)" album)))
+                (t (output "~A" (song-local-path song)))))))
+
+        (when (= 1 count)
+          (output "Shuffletron ~A" *shuffletron-version*))
+
+        (loop while (< count *term-cols*) do (output " "))))
+
+    (sgr '(0))
+    (restore-cursor)
+    (format t "~C[7p" #\Esc)                   ; Show cursor    
+    (incf *funcounter*)
+    (finish-output)
+    (incf *waitcounter*))
+  (incf *donecounter*))
+
+;;; How the hell does a little status bar take that much code to paint?

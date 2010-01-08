@@ -3,7 +3,7 @@ CCL=ccl
 CCL64=ccl64
 PREFIX=/usr/local
 
-export LD_LIBRARY_PATH=.
+export LD_LIBRARY_PATH=./libs/
 
 all:	shuffletron-bin
 
@@ -12,12 +12,13 @@ tidy:
 
 clean: tidy
 	rm -f shuffletron-bin shuffletron-ccl shuffletron-ccl64
+	rm -f libs/gen*
 	rm -f *~ *.fasl *.lx*fsl
 
 install:
 	install -m 0755 shuffletron shuffletron-bin $(PREFIX)/bin
-#	mkdir -p $(PREFIX)/lib/shuffletron
-#	install -m 0755 libmixalot-mpg123.so.0 $(PREFIX)/lib/shuffletron
+	mkdir -p $(PREFIX)/lib/shuffletron
+	install -m 0755 libs/*.so* $(PREFIX)/lib/shuffletron
 
 .PHONY: install all clean distclean
 
