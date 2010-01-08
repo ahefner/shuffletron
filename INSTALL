@@ -15,7 +15,8 @@ Binary releases are compiled with SBCL.
 To compile from source:
 
 Compiling Shuffletron from source requires the following:
-        SBCL
+
+        SBCL (or CCL)
         CFFI
         Osicat (at least version 0.6.0)
         Mixalot (at least version 0.0.2)
@@ -25,6 +26,32 @@ Run 'make', then 'sudo make install'.
 The default make target compiles the program using SBCL. If you prefer
 CCL, type 'make shuffletron-ccl' or 'make shuffletron-ccl64' instead
 (see "Support for Clozure Common Lisp" below).
+
+------------------------------------------------------------------------
+
+Issues with libmpg123 on 32-bit machines:
+
+There are various thorny issues with recent versions of libmpg123
+on 32-bit x86 machines. The binary releases of Shuffletron come with
+appropriately compiled versions of the library which sidestep these
+issues. If compiling from source, you have a few options:
+
+  * Use an old version of the library (such as 1.4.3)
+  * Use the libmixlaot-mpg123 from a binary release (you'll have to
+    uncomment several lines in the Makefile to install it, when starting
+    from a source tarball)
+  * Compile (or recompile) mpg123 with the correct settings.
+
+When compiling mpg123, you will at a minimum have to configure it
+with the --disable-largefile flag. If you encounter errors, adding
+--disable-aligncheck with a CFLAGS= -mstackrealign *should* fix it
+(I'm not 100% certain, because I hacked my SBCL to work around the
+issue, and don't use 32-bit Linux heavily anyway).
+
+As of mpg123-1.8.1, there's a nasty UTF-16 decoding bug in its ID3 
+parser that will crash the player on certain files. The version of the
+library included in the binary releases (libmixalot-mpg123) include a
+patch fixing this issue. This patch is included as id3-utf16.diff.
 
 ------------------------------------------------------------------------
 

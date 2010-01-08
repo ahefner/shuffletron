@@ -1,0 +1,47 @@
+Index: src/libmpg123/id3.c
+===================================================================
+--- src/libmpg123/id3.c	(revision 2219)
++++ src/libmpg123/id3.c	(working copy)
+@@ -797,6 +797,7 @@
+ static void convert_utf16(mpg123_string *sb, unsigned char* s, size_t l, int str_be)
+ {
+ 	size_t i;
++        size_t n = l & ~1;
+ 	unsigned char *p;
+ 	size_t length = 0; /* the resulting UTF-8 length */
+ 	/* Determine real length... extreme case can be more than utf-16 length. */
+@@ -804,15 +805,13 @@
+ 	size_t low  = 1;
+ 	debug1("convert_utf16 with length %lu", (unsigned long)l);
+ 
+-	if(l < 1){ mpg123_set_string(sb, ""); return; }
+-
+ 	if(!str_be) /* little-endian */
+ 	{
+ 		high = 1; /* The second byte is the high byte. */
+ 		low  = 0; /* The first byte is the low byte. */
+ 	}
+ 	/* first: get length, check for errors -- stop at first one */
+-	for(i=0; i < l-1; i+=2)
++	for(i=0; i < n; i+=2)
+ 	{
+ 		unsigned long point = ((unsigned long) s[i+high]<<8) + s[i+low];
+ 		if((point & 0xd800) == 0xd800) /* lead surrogate */
+@@ -827,7 +826,7 @@
+ 			else /* if no valid pair, break here */
+ 			{
+ 				debug1("Invalid UTF16 surrogate pair at %li.", (unsigned long)i);
+-				l = i; /* Forget the half pair, END! */
++				n = i; /* Forget the half pair, END! */
+ 				break;
+ 			}
+ 		}
+@@ -838,7 +837,7 @@
+ 
+ 	/* Now really convert, skip checks as these have been done just before. */
+ 	p = (unsigned char*) sb->p; /* Signedness doesn't matter but it shows I thought about the non-issue */
+-	for(i=0; i < l-1; i+=2)
++	for(i=0; i < n; i+=2)
+ 	{
+ 		unsigned long codepoint = ((unsigned long) s[i+high]<<8) + s[i+low];
+ 		if((codepoint & 0xd800) == 0xd800) /* lead surrogate */

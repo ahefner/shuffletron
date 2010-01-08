@@ -28,7 +28,7 @@
 
 (in-package :shuffletron)
 
-(defparameter *shuffletron-version* "0.0.3")
+(defparameter *shuffletron-version* "0.0.4")
 
 ;;;; POSIX directory walker
 
@@ -193,8 +193,8 @@
   (format t "~&Scanning ID3 tags (~D).~%" (songs-needing-id3-scan))
   (when verbose (fresh-line))
   (loop with pending = (and verbose (songs-needing-id3-scan))
+        with n = 1
         for song across *library*
-        for n upfrom 1
         unless (song-id3-p song) do 
         (when verbose
           (carriage-return)
@@ -203,6 +203,7 @@
         (setf (song-id3 song) (mpg123:get-tags-from-file (song-full-path song) :no-utf8 t)
               (song-matchprops song) nil
               (song-id3-p song) t)
+        (incf n)
         finally 
         (when (and pending (not (zerop pending))) (terpri)))
   (save-id3-cache))
@@ -1450,6 +1451,7 @@ already playing will be interrupted by the next song in the queue.
     ((string= line "toqueue")
      (with-playqueue ()
        (setf *playqueue* (coerce *selection* 'list))))
+
 
     ;; Randomize queue
     ((string= line "shuffle")

@@ -1,5 +1,7 @@
 (in-package :cl-user)
 
+(push :shuffletron-deploy *features*)
+
 (load "shuffletron.asd")
 
 (asdf:oos 'asdf:compile-op :shuffletron)
