@@ -479,6 +479,14 @@
         (streamer-seek new *mixer* (* start-at (mixer-rate *mixer*))))))
   (update-status-bar))
 
+(defun play-songs (songs)
+  (when (> (length songs) 0)
+    (play-song (elt songs 0) :enqueue-on-completion *loop-mode*)
+    (show-current-song))
+  (when (> (length songs) 1)
+    (with-playqueue ()
+      (setf *playqueue* (concatenate 'list (subseq songs 1) *playqueue*)))))
+
 (defun play-next-song ()
   (with-playqueue ()
     (cond
@@ -1391,13 +1399,11 @@ already playing will be interrupted by the next song in the queue.
 
     ;; Play songs now (first is played, subsequent are added to queue
     ((digit-char-p (aref line 0))
-     (let ((selected (selection-songs line)))
-       (when (> (length selected) 0) 
-         (play-song (elt selected 0) :enqueue-on-completion *loop-mode*)
-         (show-current-song))
-       (when (> (length selected) 1)
-         (with-playqueue ()
-           (setf *playqueue* (concatenate 'list (subseq selected 1) *playqueue*))))))
+     (play-songs (selection-songs line)))
+
+    ;; Play all songs now
+    ((string= line "all")
+     (play-songs *selection*))
 
     ;; Append songs and end of playqueue
     ((and (> (length line) 1) (char= #\+ (aref line 0)))
