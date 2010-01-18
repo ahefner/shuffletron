@@ -13,20 +13,22 @@
 
 ;;; Round up generated shared objects and put them in libs subdirectory:
 (format t "Gathering generated objects:~%")
-(loop for library in (cffi:list-foreign-libraries :type :grovel-wrapper)
-      for n upfrom 0
-      as filename = (cffi:foreign-library-pathname library)
-      as newname = (format nil "gen~D" n)
-      do
-      (format t "~D: ~A~%" n filename)
-      (alexandria:copy-file filename
-                            (merge-pathnames
-                             (make-pathname :name newname
-                                            :directory '(:relative "libs")
-                                            :type "so")
-                             *load-pathname*))
-      (cffi:close-foreign-library library)
-      (cffi:load-foreign-library (format nil "~A.so" newname)))
+(let ((libdir (merge-pathnames
+                (make-pathname :directory '(:relative "libs"))
+                *load-pathname*)))
+  (ensure-directories-exist libdir)
+  (loop for library in (cffi:list-foreign-libraries :type :grovel-wrapper)
+        for n upfrom 0
+        as filename = (cffi:foreign-library-pathname library)
+        as newname = (format nil "gen~D" n)
+        do
+        (format t "~D: ~A~%" n filename)
+        (alexandria:copy-file filename
+                              (merge-pathnames
+                                (make-pathname :name newname :type "so")
+                                libdir))
+        (cffi:close-foreign-library library)
+        (cffi:load-foreign-library (format nil "~A.so" newname))))
 
 (print sb-sys:*shared-objects*)
 
