@@ -3,7 +3,7 @@
 RLWRAP=`which rlwrap`
 
 if [ -r `dirname $0`/libs/libmixalot-mpg123.so.0 ] ; then
-    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:./libs/
+    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:./libs/:/usr/local/lib/shuffletron
 else
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib/shuffletron
 fi
