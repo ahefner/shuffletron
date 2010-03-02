@@ -1,6 +1,6 @@
 ;;;; Shuffletron, a music player.
 
-;;;; Copyright (c) 2009 Andy Hefner
+;;;; Copyright (c) 2009,2010 Andy Hefner
 
 ;;;; Permission is hereby granted, free of charge, to any person obtaining
 ;;;; a copy of this software and associated documentation files (the
@@ -1381,8 +1381,12 @@ already playing will be interrupted by the next song in the queue.
         (command (subseq line 0 sepidx))
         (args    (and sepidx (string-trim " " (subseq line sepidx)))))
   (cond
-    ;; A blank input line resets the query set.
-    ((emptyp line) (reset-query))
+
+    ;; Back: restore previous selection.
+    ;; A blank input line is a synonym for the "back" command.
+    ((or (emptyp line) (string= line "back"))
+     (when *selection-history*
+       (setf *selection* (pop *selection-history*))))
 
     ;; Lisp evaluation
     ((and *eval-support* (string= command "eval"))
@@ -1390,11 +1394,6 @@ already playing will be interrupted by the next song in the queue.
 
     ((and (eq *eval-support* 'smart) (equal (subseq line 0 1) "("))
      (eval* line))
-
-    ;; Back (restore previous selection)
-    ((string= line "back")
-     (when *selection-history*
-       (setf *selection* (pop *selection-history*))))
 
     ;; Input starting with a forward slash refines the current query.
     ((char= (aref line 0) #\/) (refine-query (subseq line 1)))
