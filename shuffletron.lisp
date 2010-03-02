@@ -318,17 +318,25 @@
         (map 'vector #'song-local-path (songs-matching-tag tag)))
   (note-tag-write-time tag))
 
-(defun tag-song (song tag)
+(defun tag-songs (songs tag)
   (load-tags)
-  (unless (member tag (song-tags song) :test #'string=)
-    (push tag (song-tags song))
-    (save-tags-list tag)))
+  (map nil (lambda (song)
+             (unless (member tag (song-tags song) :test #'string=)
+               (push tag (song-tags song))
+               (save-tags-list tag)))
+       songs))
 
-(defun untag-song (song tag)
+(defun tag-song (song tag) (tag-songs (list song) tag))
+
+(defun untag-songs (songs tag)
   (load-tags)
-  (when (member tag (song-tags song) :test #'string=)
-    (setf (song-tags song) (delete tag (song-tags song) :test #'string=))
-    (save-tags-list tag)))
+  (map nil (lambda (song)
+             (when (member tag (song-tags song) :test #'string=)
+               (setf (song-tags song) (delete tag (song-tags song) :test #'string=))
+               (save-tags-list tag)))
+       songs))
+
+(defun untag-song (song tag) (untag-songs (list song) tag))
 
 ;;; Song start times
 
@@ -1486,10 +1494,24 @@ already playing will be interrupted by the next song in the queue.
     ;; Add tags to current file
     ((and (string= command "tag") args)
      (tag-current-song args))
-    
+
     ;; Show tags
     ((and (string= command "tag") (null args))
      (show-current-song-tags))
+
+    ;; Add tag to all songs in selection
+    ((string= command "tagall")
+     (let ((tags (parse-tag-list args)))
+       (cond
+         ((null tags) (format t "~&Apply which tags to selected songs?~%"))
+         (t (dolist (tag tags) (tag-songs *selection* tag))))))
+
+    ;; Remove tag from all songs in selection
+    ((string= command "untagall")
+     (let ((tags (parse-tag-list args)))
+       (cond
+         ((null tags) (format t "~&Remove which tags from selected songs?~%"))
+         (t (dolist (tag tags) (untag-songs *selection* tag))))))
 
     ;; Remove tags from current file
     ((string= command "untag")
