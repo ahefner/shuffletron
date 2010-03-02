@@ -143,6 +143,7 @@
 ;;;; Library
 
 (defvar *library* nil)
+(defvar *filtered-library* nil "The library, excluding songs tagged 'ignore'")
 (defvar *local-path->song* (make-hash-table :test 'equal))
 (define-symbol-macro *library-base* (pref "library-base"))
 
@@ -322,9 +323,10 @@
   (load-tags)
   (map nil (lambda (song)
              (unless (member tag (song-tags song) :test #'string=)
-               (push tag (song-tags song))
-               (save-tags-list tag)))
-       songs))
+               (push tag (song-tags song))))
+       songs)
+  (save-tags-list tag)
+  (when (string= tag "ignore") (compute-filtered-library)))
 
 (defun tag-song (song tag) (tag-songs (list song) tag))
 
@@ -332,9 +334,10 @@
   (load-tags)
   (map nil (lambda (song)
              (when (member tag (song-tags song) :test #'string=)
-               (setf (song-tags song) (delete tag (song-tags song) :test #'string=))
-               (save-tags-list tag)))
-       songs))
+               (setf (song-tags song) (delete tag (song-tags song) :test #'string=))))
+       songs)
+  (save-tags-list tag)
+  (when (string= tag "ignore") (compute-filtered-library)))
 
 (defun untag-song (song tag) (untag-songs (list song) tag))
 
@@ -376,18 +379,19 @@
 (defvar *selection-history* nil)
 (defvar *history-depth* 16)
 
-(defun querying-library-p () (= (length *selection*) (length *library*)))
+(defun querying-library-p () (= (length *selection*) (length *filtered-library*)))
 
-(defun set-selection (new-selection)
-  (push *selection* *selection-history*)
-  (when (> (length *selection-history*) *history-depth*)
-    (setf *selection-history* (subseq *selection-history* 0 *history-depth*)))
+(defun set-selection (new-selection &key (record t))
+  (when record
+   (push *selection* *selection-history*)
+   (when (> (length *selection-history*) *history-depth*)
+     (setf *selection-history* (subseq *selection-history* 0 *history-depth*))))
   (setf *selection* new-selection
         *selection-changed* t)
   (values))
 
 (defun reset-query ()
-  (set-selection (copy-seq *library*))
+  (set-selection (copy-seq *filtered-library*) :record nil)
   (loop for x across *library* do (setf (song-matchprops x) nil)))
 
 (defmacro any (&body forms)
@@ -722,6 +726,9 @@ pairs as cons cells."
   (finish-output *standard-output*)
   (or (read-line *standard-input* nil) (quit)))
 
+(defun compute-filtered-library ()
+  (setf *filtered-library* (remove-if (lambda (song) (find "ignore" (song-tags song) :test #'string=)) *library*)))
+
 (defun init ()
   (format t "~&This is Shuffletron ~A~%" *shuffletron-version*)
   (setf *random-state* (make-random-state t))
@@ -740,6 +747,7 @@ pairs as cons cells."
   (format t "~CLibrary contains ~:D files.        ~%"
           (code-char 13) (length *library*))
   (load-tags)
+  (compute-filtered-library)
   (load-id3-cache)
   (reset-query)
   ;; Scan tags of new files automatically, unless there's a ton of them.
@@ -1116,8 +1124,8 @@ rather than today if the date would be less than the current time."
   (setf *wakeup-time* nil)
   (unless (unpause)
     (with-playqueue ()
-      (unless (or *playqueue* (emptyp *library*))
-        (loop repeat 10 do (push (alexandria:random-elt *library*) *playqueue*))))
+      (unless (or *playqueue* (emptyp *filtered-library*))
+        (loop repeat 10 do (push (alexandria:random-elt *filtered-library*) *playqueue*))))
     (play-next-song)))
 
 (defun alarm-thread-toplevel ()
@@ -1156,8 +1164,8 @@ rather than today if the date would be less than the current time."
 
 (defun print-help ()
   (format t "
-Shuffletron is a text-mode music player oriented around search and
-tagging. Its principle of operation is simple: search for songs, then
+Shuffletron  is a text-mode  music player  oriented around  search and
+tagging. Its principle of operation  is simple: search for songs, then
 play them. Searches are performed by typing a / followed by the search
 string:
 
@@ -1177,14 +1185,15 @@ If ID3 tags are present, songs are presented in the following form:
 
    Artist, [Album,] [Track:] Title
 
-Although not shown above, artist names are color coded red, album
-names yellow, and song titles white.  In successive lines with the
-same artist or album and artist, the redundant fields are elided. If
+Although  not shown  above, artist  names are  color coded  red, album
+names yellow,  and song  titles white.  In  successive lines  with the
+same artist or  album and artist, the redundant  fields are elided. If
 ID3 information on the artist and title is not available, the filename
 is printed instead.
 
-In the leftmost column is some subset of the letters 'f', 'a', 'b', and 't'.
-These indicate which fields matched the query string, as follows:
+In the  leftmost column is some  subset of the letters  'f', 'a', 'b',
+and 't'.   These indicate  which fields matched  the query  string, as
+follows:
 
    f: Filename
    a: Artist
@@ -1192,15 +1201,15 @@ These indicate which fields matched the query string, as follows:
    t: Title
 
 Following this is a column of numbers, starting from zero. These allow
-you to choose songs to play as comma (or space) delimited numbers or
-ranges of numbers. If the song is already in the queue, the number is
+you to choose  songs to play as comma (or  space) delimited numbers or
+ranges of numbers. If the song  is already in the queue, the number is
 highlighted in bold white text. Here, I decide to play song 8 then 0-3
 by entering this at the prompt:
 
 9 matches> 8, 0-3
 
-The currently playing song is interrupted, and the chosen songs are
-added to the head of the playback queue. To see the contents of the
+The currently  playing song is  interrupted, and the chosen  songs are
+added to  the head of the playback  queue. To see the  contents of the
 queue, use the 'queue' command:
 
 9 matches> queue
@@ -1209,31 +1218,32 @@ queue, use the 'queue' command:
      (2)  \"........................\"  2: Needy Girl
      (3)  \"........................\"  3: You're So Gangsta
 
-Notice that the prompt changed from \"library>\" to \"\9 matches>\"
-after our initial search. Successive searches refine the result of
+Notice that  the prompt changed  from \"library>\" to  \"\9 matches>\"
+after  our initial search.  Successive searches  refine the  result of
 previous searches, and the prompt indicates the number of items you're
-currently searching within. If there had been more than 50 matches,
-they would not be printed by default, but you could use the 'show'
-command at any time to print them. Also note that the 'queue' command
-doesn't disrupt the current search results (this is why numbering in
-the queue listing is surrounded with parentheses, to indicate that
-entering numbers for playback does not refer to them). The queue can
-be cleared with the 'clear' command, and the 'skip' command skips the
+currently searching  within. If there  had been more than  50 matches,
+they would  not be printed  by default, but  you could use  the 'show'
+command at any time to print  them. Also note that the 'queue' command
+doesn't disrupt the  current search results (this is  why numbering in
+the  queue listing is  surrounded with  parentheses, to  indicate that
+entering numbers for  playback does not refer to  them). The queue can
+be cleared with the 'clear'  command, and the 'skip' command skips the
 current song and advances to the next song in the queue.
 
-To add songs to the queue without interrupting the current song, prefix the
-song list with \"+\" (to append) or \"pre\" (to prepend).
+To  add songs  to the  queue  without interrupting  the current  song,
+prefix the song list with \"+\" (to append) or \"pre\" (to prepend).
 
-When you've completed a search, a single blank line resets the results, and
-the \"library>\" prompt will be restored.
+When you've  completed a  search, a single  blank line  moves backward
+through the search history, allowing you to return to the \"library>\"
+prompt.
 
-If you imported a large library, the ID3 tags may not have been
-scanned.  In this case, the program will have suggested you run the
-scanid3 command.  Scanning ID3 tags can be very time consuming, as
-each file must be opened and read from. Once scanned, ID3 information
-is remembered by caching it in the ~~/.shuffletron/id3-cache file, so
-you only need to do this the first time you run the program. ID3 tags
-of new files are scanned automatically when the program starts unless 
+If you've  imported a large  library, the ID3  tags may not  have been
+scanned.   In this case,  the program  will suggest  that you  run the
+scanid3 command.   Scanning ID3  tags can be  very time  consuming, as
+each file must be opened  and read from. Once scanned, ID3 information
+is remembered by caching  it in the ~~/.shuffletron/id3-cache file, so
+you only need to do this the first time you run the program.  ID3 tags
+of new files are scanned  automatically when the program starts unless
 there are more than 1,000 new files.
 
 Additional help topics:
@@ -1282,6 +1292,8 @@ Command list:
   tagged TAGS    Search for files having any of specified tags.
   tags           List all tags (and # occurrences) within current query.
   killtag TAGS   Remove all occurances of the given tags
+  tagall TAGS    Apply tags to all selected songs
+  untagall TAGS  Remove given tags from all selected songs
 
   time           Print current time
   alarm          Set alarm.
@@ -1320,38 +1332,40 @@ How to play your entire library in shuffle mode:
 
 (defun print-loop-help ()
   (format t "
-The \"loop\" command toggles looping mode. In looping mode, a song taken
-from the head of the queue for playback is simultaneously added at the 
-tail of the queue.
+The \"loop\"  command toggles  looping mode. In  looping mode,  a song
+taken from the head of  the queue for playback is simultaneously added
+at the tail of the queue.
 
-Choosing a single song to play (interrupting the current song) does not
-affect the contents of the queue, and there's no issue in interrupting
-a song which you'd like to continue looping in the queue, because it has
-already been rotated to the end of the queue. This behavior allows you to
-audition songs for addition to the queue without disturbing its contents.
-When you've found a song you'd like to add the queue, you can do it in the
-usual fashion, using the \"+\" or \"pre\" commands, or by abusing the 
-\"repeat\" command (this will add the current song to the head of the queue).
+Choosing a  single song to  play (interrupting the current  song) does
+not  affect  the  contents of  the  queue,  and  there's no  issue  in
+interrupting a song which you'd like to continue looping in the queue,
+because it  has already  been rotated  to the end  of the  queue. This
+behavior  allows you  to  audition  songs for  addition  to the  queue
+without disturbing its contents.  When  you've found a song you'd like
+to add the queue, you can do  it in the usual fashion, using the \"+\"
+or \"pre\" commands,  or by abusing the \"repeat\"  command (this will
+add the current song to the head of the queue).
 
-In looping mode, a song which plays to completion (and was not originally
-started from the queue) is added to the end of the queue. This provides 
-another way to extend the queue while auditioning songs - if you allow the
-song to play to completion, presumably you want to add it to the queue.
+In  looping  mode, a  song  which plays  to  completion  (and was  not
+originally  started  from  the queue)  is  added  to  the end  of  the
+queue. This provides another way to extend the queue while auditioning
+songs -  if you allow the  song to play to  completion, presumably you
+want to add it to the queue.
 "))
 
 (defun print-alarm-help ()
   (format t "
-The \"alarm\" command provides an alarm clock feature which will play music
-when the scheduled wakeup time is reached. There is a single wakeup time, 
-and when it is reached the wakeup time is cleared. When the alarm is
-triggered, the music player will do one of the following:
+The \"alarm\" command provides an  alarm clock feature which will play
+music when  the scheduled  wakeup time is  reached. There is  a single
+wakeup time, and  when it is reached the wakeup  time is cleared. When
+the alarm is triggered, the music player will do one of the following:
 
   1) If playback is paused, unpause the player.
   2) Otherwise, prepend ten random songs to queue and play them.
 
-With no argument, the \"alarm\" command prints the current wakeup time. An 
-argument to the command specifies the wakeup time. This can be done in a
-variety of formats:
+With  no argument,  the \"alarm\"  command prints  the  current wakeup
+time. An argument  to the command specifies the  wakeup time. This can
+be done in a variety of formats:
 
   alarm at 7:45 am      # \"at\" is optional and doesn't change the meaning
   alarm 7:45 am
@@ -1368,12 +1382,15 @@ If the player is already playing when the alarm goes off, the song
 already playing will be interrupted by the next song in the queue.
 "))
 
+;;; TODO: Somewhere, the help should mention the 'ignore' tag, but
+;;; there's currently no prose dedicated to tagging where it would
+;;; make sense to mention it.
+
 (defun eval* (string)
   "Read a form from STRING, evaluate it in the Shuffletron
   package and print the result."
-     (print (eval `(progn
-                     (in-package ,(package-name #.*package*))
-                     ,(read-from-string string))))
+     (print (eval (let ((*package* (find-package :shuffletron)))
+                    (read-from-string string))))
      (terpri))
 
 (defun parse-and-execute (line) 
@@ -1385,8 +1402,9 @@ already playing will be interrupted by the next song in the queue.
     ;; Back: restore previous selection.
     ;; A blank input line is a synonym for the "back" command.
     ((or (emptyp line) (string= line "back"))
-     (when *selection-history*
-       (setf *selection* (pop *selection-history*))))
+     (cond
+       (*selection-history* (setf *selection* (pop *selection-history*)))
+       (t (reset-query))))
 
     ;; Lisp evaluation
     ((and *eval-support* (string= command "eval"))
@@ -1470,9 +1488,9 @@ already playing will be interrupted by the next song in the queue.
     ;; Random
     ((string= line "random")
      (cond
-       ((emptyp *library*)
-        (format t "The library is empty.~%"))
-       (t (play-song (alexandria:random-elt (if (emptyp *selection*) *library* *selection*)))))
+       ((emptyp *filtered-library*) (format t "The library is empty.~%"))
+       ((emptyp *library*) (format t "All songs in the library are ignored.~%"))
+       (t (play-song (alexandria:random-elt (if (emptyp *selection*) *filtered-library* *selection*)))))
      (show-current-song))
 
     ;; Random from query
@@ -1689,6 +1707,11 @@ already playing will be interrupted by the next song in the queue.
 (defvar *donecounter* 0)
 
 (defun update-status-bar ()
+  ;; The status bar is now disabled.
+  ;; To enable it, call DISPLAY-STATUS-BAR here.
+  (values))
+
+(defun display-status-bar ()
   (with-output ()
     (save-cursor)
     (update-terminal-size)
