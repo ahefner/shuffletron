@@ -2,7 +2,13 @@
 
 RLWRAP=`which rlwrap`
 
-if [ -r `dirname $0`/libs/libmixalot-mpg123.so.0 ] ; then
+DIR=`dirname $0`
+
+# You'll never see messages echoed here unless something fails,
+# because Shuffletron currently clears the screen at startup. Oops.
+
+if [ -r $DIR/libs/libmixalot-mpg123.so.0 ] ; then
+    echo "Using local library directory."
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:./libs/:/usr/local/lib/shuffletron
 else
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib/shuffletron

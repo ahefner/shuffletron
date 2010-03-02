@@ -22,6 +22,9 @@
         as filename = (cffi:foreign-library-pathname library)
         as newname = (format nil "gen~D" n)
         do
+        ;; cffi-grovel previously didn't give generated libraries
+        ;; meaningful or guaranteed unique names, so I rename them
+        ;; myself.
         (format t "~D: ~A~%" n filename)
         (alexandria:copy-file filename
                               (merge-pathnames
