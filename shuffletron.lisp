@@ -1681,8 +1681,8 @@ already playing will be interrupted by the next song in the queue.
 
 (defun run ()
   (spooky-init)
-  ;; Clear the screen first:
-  (format t "~C[2J~C[1;1H" #\Esc #\Esc)
+  ;; (Don't) Clear the screen first:
+  #+ONSECONDTHOUGHT (format t "~C[2J~C[1;1H" #\Esc #\Esc)
   (init)
   (audio-init)
   (mainloop))
