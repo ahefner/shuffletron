@@ -1417,7 +1417,8 @@ already playing will be interrupted by the next song in the queue.
     ((char= (aref line 0) #\/) (refine-query (subseq line 1)))
 
     ;; Show all matches
-    ((string= line "show") (show-current-query))
+    ((or (string= line "show") (string= line "ls")) 
+     (show-current-query))
 
     ;; Quit
     ((or (string= line "quit") (string= line "exit")) (quit))     
