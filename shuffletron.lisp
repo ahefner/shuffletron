@@ -29,6 +29,7 @@
 (in-package :shuffletron)
 
 (defparameter *shuffletron-version* "0.0.5")
+(defvar *argv* nil)
 
 ;;;; POSIX directory walker
 
@@ -96,6 +97,19 @@
 
 ;;;; Preferences
 
+;;; Profile support (for multiple libraries in different
+;;; locations). The "default" profile stores its settings directly
+;;; under ~/.shuffletron/ for backward compatibility with existing
+;;; settings. Alternate profiles store them under
+;;; ~/.shuffletron/profiles/<ProfileName>/.
+
+(defvar *profile* "default")
+
+(defun profile-path-component ()
+  (if (equal *profile* "default")
+      nil
+      (list "profiles" *profile*)))
+
 (defun file (filename)
   (with-open-file (in filename :external-format :latin1)
     (with-standard-io-syntax ()
@@ -120,7 +134,7 @@
   (let ((name (if (listp prefname) (car (last prefname)) prefname))
         (subpath (if (listp prefname) (subpath prefname) nil)))
     (merge-pathnames
-     (make-pathname :directory `(:relative ".shuffletron" ,@(mapcar #'string subpath))
+     (make-pathname :directory `(:relative ".shuffletron" ,@(profile-path-component) ,@(mapcar #'string subpath))
                     :name (and name (string name)))
      (user-homedir-pathname))))
 
@@ -729,12 +743,30 @@ pairs as cons cells."
 (defun compute-filtered-library ()
   (setf *filtered-library* (remove-if (lambda (song) (find "ignore" (song-tags song) :test #'string=)) *library*)))
 
+(defun parse-command-line-args ()
+  (let ((args *argv*))
+    (loop with arg1 = nil 
+          while args
+          as arg = (pop args) do
+          (flet ((bin (name &key (argname "parameter"))
+                   (when (equal arg name)
+                     (unless args
+                       (format t "Argument ~W expects a ~A." name argname)                       
+                       (quit))
+                     (setf arg1 (pop args))
+                     t)))
+            (cond
+              ((bin "--profile")
+               (setf *profile* arg1)
+               (format t "~&Using profile ~W~%" *profile*))
+              (t (format t "~&Unrecognized argument ~W.~%" arg)))))))
+
 (defun init ()
-  (format t "~&This is Shuffletron ~A~%" *shuffletron-version*)
+  (parse-command-line-args)
   (setf *random-state* (make-random-state t))
   (loop do
         (init-library)
-        (unless *library-base* 
+        (unless *library-base*
           (format t "~&Enter library path: ")
           (setf *library-base* (dfn (getline) "")))
         (when (not (library-scan *library-base*))
@@ -1684,6 +1716,9 @@ already playing will be interrupted by the next song in the queue.
   (spooky-init)
   ;; (Don't) Clear the screen first:
   #+ONSECONDTHOUGHT (format t "~C[2J~C[1;1H" #\Esc #\Esc)
+  (format t "~&This is Shuffletron ~A~%" *shuffletron-version*)
+  #+SBCL (setf *argv* (rest sb-ext:*posix-argv*))
+  #-SBCL (warn "*argv* not implemented for this CL implementation.")
   (init)
   (audio-init)
   (mainloop))

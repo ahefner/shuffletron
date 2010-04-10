@@ -8,7 +8,7 @@ DIR=`dirname $0`
 # because Shuffletron currently clears the screen at startup. Oops.
 
 if [ -r $DIR/libs/libmixalot-mpg123.so.0 ] ; then
-    echo "Using local library directory."
+    echo "Using local shared library directory."
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:./libs/:/usr/local/lib/shuffletron
 else
     export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib/shuffletron
@@ -19,5 +19,5 @@ if [ -z $RLWRAP ] ; then
    echo "   have full command editing and history."
    $0-bin
 else
-   rlwrap $0-bin
+   rlwrap $0-bin $@
 fi
