@@ -494,6 +494,7 @@
   (with-stream-control ()
     (when *current-stream* (end-stream *current-stream*))
     (let ((new (make-mp3-streamer (song-full-path song)
+                                  :prescan (pref "prescan" t)
                                   :class 'mp3-jukebox-streamer
                                   :song song
                                   :enqueue-on-completion enqueue-on-completion))
@@ -887,7 +888,7 @@ type \"scanid3\". It may take a moment.~%"
              (setf last-artist artist
                    last-album  album))
             (t (field (song-local-path item) :filename)
-               ;; Occasionally occur we may have an artist but not the
+               ;; Occasionally we may have an artist but not the
                ;; title.  Clear these, so we don't elide fields that
                ;; we didn't actually print.
                (setf last-artist nil
@@ -1330,7 +1331,8 @@ Command list:
   time           Print current time
   alarm          Set alarm.
   
-  scanid3        Scan new files for ID3 tags (this can take a while)
+  scanid3        Scan new files for ID3 tags
+  prescan        Toggle file prescanning (useful if file IO is slow)
   exit           Exit the program.
   
   help [topic]   Help
@@ -1682,6 +1684,14 @@ already playing will be interrupted by the next song in the queue.
      #+SBCL (cffi:foreign-funcall "setenv" :string "SBCL_HOME" :string "/usr/local/lib/sbcl/" :int 0 :int)
      (asdf:oos 'asdf:load-op :swank)     
      (eval (read-from-string "(swank:create-server :port 0)")))
+
+    ;; Toggle file prescanning
+    ((string= line "prescan")
+     (setf (pref "prescan") (not (pref "prescan" t)))
+     (if (pref "prescan")
+         (format t "~&Prescanning enabled. This ensures track lengths and seeks are accurate.~%")
+         (format t "~&Prescanning disabled. This eliminates the delay when initially starting
+playback, and is useful for slow disks or network file systems.~%")))
 
     ;; ???
     (t (format t "Unknown command ~W. Try 'help'.~%" line)))))
