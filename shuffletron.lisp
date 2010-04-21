@@ -24,7 +24,38 @@
 
 (defpackage :shuffletron
   (:use :common-lisp :mixalot :mixalot-mp3)
-  (:export :run))
+  (:nicknames :shuf)
+  (:export #:run #:*shuffletron-version* 
+           #:emptyp
+           #:walk #:rel #:dfn
+           #:*profile* #:pref #:prefpath
+           #:*library* #:*filtered-library* #:*library-base*
+           #:song #:song-full-path #:song-local-path #:song-tags
+           #:song-properties #:song-id3 #:song-id3-p
+           #:song-start-time
+           #:songs-matching-tags #:songs-matching-tag
+           #:tag-songs #:tag-song #:untag-songs #:untag-song
+           #:decode-as-filename #:encode-as-filename
+           #:*selection* #:selection-history*
+           #:querying-library-p #:set-selection 
+           #:reset-query #:refine-query #:query
+           #:with-stream-control #:with-playqueue
+           #:*mixer* #:*current-stream* #:*playqueue*
+           #:song-of #:stopped
+           #:*loop-mode* #:*wakeup-time*
+           #:end-stream #:play-song #:play-songs #:play-next-song
+           #:toggle-pause #:unpause
+           #:current-song-playing
+           #:playqueue-and-current
+           #:queue-remove-songs #:queue-remove-indices
+           #:parse-item-list #:parse-tag-list
+           #:tag-current-song #:untag-current-song
+           #:kill-tag #:tag-count-pairs
+           #:parse-ranges #:expand-ranges #:extract-ranges
+           #:sgr #:spacing 
+           #:time->string #:utime->string #:parse-relative-time
+           #:parse-alarm-args
+           #:parse-and-execute))
 
 (in-package :shuffletron)
 
@@ -52,8 +83,8 @@
       (unwind-protect
 	   (loop
             (multiple-value-bind (name type) (osicat-posix:readdir dir)
-              ;; FIXME: Some OSes (and ancient glibc versions) don't
-              ;; support d_type. Fall back to stat in that case.
+              ;; Some OSes (and ancient glibc versions) don't support
+              ;; d_type. We fall back to stat in that case.
               (when (and name (eql type osicat-posix:dt-unknown))
                 (setf type (find-type-via-stat path name)))
               (cond
@@ -147,8 +178,6 @@
     (reader-error (c)
       (format t "Error parsing contents of ~A:~%~A~%" (prefpath name) c)
       (values default nil))))
-
-(defstruct cached-pref value write-date)
 
 (defun (setf pref) (value name)
   (ensure-directories-exist (prefpath name))
@@ -641,8 +670,9 @@
                         num-killed num-killed (decode-as-filename tag)))
   (save-tags-list tag))
 
-(defun show-all-tags ()
-  (let* ((all-tags (loop for song across *selection* appending (song-tags song)))
+(defun tag-count-pairs (songs)
+  (let* ((all-tags (loop for song across songs
+                         appending (song-tags song)))
          (no-dups nil)
          (counts (make-hash-table :test 'equal)))
     (dolist (tag all-tags)
@@ -651,13 +681,15 @@
         (t (setf (gethash tag counts) 1
                  no-dups (cons tag no-dups)))))
     (setf no-dups (sort no-dups #'string<=))
-    (format t "All tags in ~A: ~{~A~^, ~}~%" 
-            (if (querying-library-p) "library" "query")
-            (loop for tag in no-dups
-                  as printable = (decode-as-filename tag)
-                  as count = (gethash tag counts)
-                  if (= 1 count) collect printable
-                  else collect (format nil "~A(~A)" printable count)))))
+    (loop for tag in no-dups collect (cons tag (gethash tag counts)))))
+
+(defun show-all-tags ()
+  (format t "All tags in ~A: ~{~A~^, ~}~%" 
+          (if (querying-library-p) "library" "query")
+          (loop for (tag . count) in (tag-count-pairs *selection*)
+                as printable = (decode-as-filename tag)
+                if (= 1 count) collect printable
+                else collect (format nil "~A(~A)" printable count))))
 
 ;;;; UI
 
