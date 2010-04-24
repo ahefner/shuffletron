@@ -208,11 +208,6 @@
 (defun carriage-return () (format t "~C" (code-char 13)))
 
 (defun add-mp3-file (full-filename relative-filename)
-  (incf *library-progress*)
-  (when (zerop (mod *library-progress* 10))
-    (carriage-return)
-    (format t "Scanning. ~:D files.." *library-progress*)
-    (force-output))
   (let ((song (make-song :full-path full-filename
                          :local-path relative-filename
                          :smashed (smash-string relative-filename)
@@ -227,6 +222,11 @@
       (walk path
             (lambda (filename)
               (when (mp3-p filename)
+                (incf *library-progress*)
+                (when (zerop (mod *library-progress* 10))
+                  (carriage-return)
+                  (format t "Scanning. ~:D files.." *library-progress*)
+                  (force-output))
                 (add-mp3-file filename (rel path filename)))))
       t)))
 
