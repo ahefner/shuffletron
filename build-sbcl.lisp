@@ -8,14 +8,15 @@
 (asdf:oos 'asdf:load-op :shuffletron)
 
 ;;; Don't need this nonsense:
-(sb-alien:unload-shared-object "librt.so")
-(sb-alien:unload-shared-object "librt.so.1")
+#+linux (sb-alien:unload-shared-object "librt.so")
+#+linux (sb-alien:unload-shared-object "librt.so.1")
 
 ;;; Round up generated shared objects and put them in libs subdirectory:
-(format t "Gathering generated objects:~%")
+#+linux
 (let ((libdir (merge-pathnames
                 (make-pathname :directory '(:relative "libs"))
                 *load-pathname*)))
+  (format t "Gathering generated objects:~%")
   (ensure-directories-exist libdir)
   (loop for library in (cffi:list-foreign-libraries :type :grovel-wrapper)
         for n upfrom 0

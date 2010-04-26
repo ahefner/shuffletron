@@ -241,7 +241,7 @@
   (values))
 
 (defun load-id3-cache ()
-  (loop for (name id3-p id3) across (pref "id3-cache")
+  (loop for (name id3-p id3) across (pref "id3-cache" #())
         as song = (gethash name *local-path->song*)
         when (and song id3-p)
         do (setf (song-id3-p song) t
@@ -1756,6 +1756,7 @@ playback, and is useful for slow disks or network file systems.~%")))
 
 (defun run ()
   (spooky-init)
+  (mixalot:main-thread-init)
   ;; (Don't) Clear the screen first:
   #+ONSECONDTHOUGHT (format t "~C[2J~C[1;1H" #\Esc #\Esc)
   (format t "~&This is Shuffletron ~A~%" *shuffletron-version*)
