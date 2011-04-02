@@ -2,10 +2,25 @@
 
 (defvar *server* (hunchentoot:start-server :port 4242))
 
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defparameter *jqui-theme-name* "dark-hive"))
+
 (defmacro with-html ((title) &body body)
   `(with-html-output-to-string (*standard-output* nil :prologue t)
      (:html
-      (:head (:title ,title))
+      (:head (:title ,title)
+             (:link :type "text/css" :href "static/style.css" :rel "Stylesheet")
+             (:link :type "text/css" 
+                    ;; It's really stupid that jQuery UI puts the version number in the 
+                    ;; CSS file name. I've renamed mine. Probably a bad idea.
+                    :href (format nil "static/~A/jquery-ui.custom.css" *jqui-theme-name*)
+                    :rel "Stylesheet")
+             (:script :type "text/javascript" :src "static/jquery.js")
+             (:script :type "text/javascript" :src "static/jquery-ui.js")
+             (:script :type "text/javascript" :src "static/ui.js")
+             (:script :type "text/javascript"
+"
+"))
       (:body ,@body))))
 
 (defun present-song (song &key streamer)
@@ -18,7 +33,7 @@
          (:table
           (:tr (:td "File")
                (:td (esc (format nil "~A" (song-local-path song)))))
-          (:tr (:td "/home/hefner/cl/shuffletron/extra/web/Position")
+          (:tr (:td "Position")
                (:td (format t "~A of ~A"
                             (time->string 
                              (round 
@@ -53,35 +68,77 @@
                                         tags)))))))))))))
 
 (defun present-songs (songs &key controls controller)
+  (declare (optimize (debug 3)))
   (with-html-output (*standard-output*)
     (:table
-     (:tr
+     (:tr      
+      (:td :class "colhead" "Artist") 
+      (:td :class "colhead" "Album")
       (when controls
-        (htm (:td "")))      
-      (:td "Artist") (:td "Album") (:td "Track") (:td "Title") (:td "Genre"))
-     (loop for song in songs
+        (htm (:td :class "DUMMY" "")))
+      (:td :class "colhead" "Track")
+      (:td :class "colhead" "Title")
+      (:td :class "colhead" "Genre"))
+     (loop with keys = '(:artist :album :track :title :genre)
+           with artist-group-len = nil
+           with album-group-len = nil
+           for (song . rest) on songs
            for n upfrom 0
            as id3 = (song-id3 song)
-           as prev = (vector nil nil nil nil)
-           as fields = (loop for key in '(:artist :album :track :title :genre)
-                             collect (getf id3 key))
+           as prev = (vector nil nil nil nil)           
+           as fields = (loop for key in keys collect (getf id3 key))
            as title = (elt fields 3)
            as artist = (elt fields 0)
+           as album = (elt fields 1)
            as sufficient = (and title artist)
            do
-           (htm
+           (htm 
             (:tr
-             (when controls
-               (htm
-                (:td (:a :href (format nil "~Aplay=~D" controller n)
-                         "Play"))))
+             ;; Compute artist and album groupings
+             (flet ((count-group (this-prop property)
+                      (loop for other in rest 
+                         as other-prop = (getf (song-id3 other) property)
+                         as matching = (and other-prop (string-equal other-prop this-prop))
+                         summing (if matching 1 0) into num-matches
+                         until (not matching)
+                         finally
+                         (htm (:td :class (symbol-name property) :rowspan (1+ num-matches)
+                                   (esc this-prop)))
+                         (return num-matches)))
+                    (update-count (count)
+                      (cond
+                        ((eql 0 count) nil)
+                        ((null count) nil)
+                        (t (1- count)))))
+               (when (and artist (not artist-group-len))
+                 (setf artist-group-len (count-group artist :artist)))
+               (when (and album (not album-group-len))
+                 (setf album-group-len (count-group album :album)))
+               (setf artist-group-len (update-count artist-group-len))
+               (setf album-group-len (update-count album-group-len)))
+             ;; Output HTML             
              (cond 
                ((not sufficient)
-                (htm (:td :colspan 5 (esc (song-local-path song)))))
+                (htm (:td :class "FILENAME" :colspan 5 (esc (song-local-path song)))))
                (t
-                (loop for field in fields do
-                      (htm
-                       (:td (esc (princ-to-string (or field ""))))))))))
+                (flet ((col (class prop)
+                         (htm (:td :class class (esc (princ-to-string (or prop "")))))))                  
+                  ;; Playback column
+                  (when controls
+                    (htm
+                     (:td
+                      (:a :href (format nil "~Aplay=~D" controller n)
+                          :class "PlayLink"
+                          (:img :src "static/play.png" :alt "Play")))))
+                  (col "TRACK" (elt fields 2))
+                  (col "TITLE" (elt fields 3))
+                  (col "GENRE" (elt fields 4)))
+                #+NIL
+                (loop for field in (cddr fields)
+                   for key in (cddr keys) do
+                   (htm
+                    (:td :class (symbol-name key)
+                         (esc (princ-to-string (or field ""))))))))))
            ))))
 
 (defun present-playqueue ()
@@ -102,6 +159,24 @@
          (present-song song :streamer current))
         (t (htm (:p "No song playing."))))
       (present-playqueue))))
+
+(define-easy-handler (page/status :uri "/status")
+  ()
+  (let* ((current *current-stream*)
+         ;;(queue-size (with-playqueue () (length *playqueue*)))
+         (song (and current (song-of current)))
+         (id3 (and song (song-id3 song))))
+    (with-html ("Shuffletron Status")
+      (cond
+        ((not song) (htm (:div "No song playing.")))
+        (song
+         (htm
+          (:table :class "nowplaying"
+           (htm (:tr (:td "Playing") (:td (esc (or (getf id3 :title) (song-local-path song))))))
+           (when (getf id3 :artist)
+             (htm (:tr (:td "Artist") (:td (esc (getf id3 :artist))))))
+           (when (getf id3 :album)
+             (htm (:tr (:td "Album") (:td (esc (getf id3 :album)))))))))))))
 
 #+NIL
 (define-easy-handler (page/tagged :uri "/tagged")
@@ -152,7 +227,7 @@
       default))
 
 (define-easy-handler (page/search :uri "/search")
-    (term tagged
+    (term ;;tagged
      (id   :parameter-type 'integer)
      (play :parameter-type 'integer))
   (let* ((*session*   (ensure-session id))
@@ -160,19 +235,20 @@
          (old-selection *selection*)
          (play-song (safe-vref *selection* play)))
     (when play-song (play-song play-song))
+    (format *trace-output* "----- SEARCH ~A ~A" term play)
     (with-html ("Shuffletron")
-      (:h1 "Search Library")
+      (:h1 (write-string (if (querying-library-p) "Search Library" "Search Results")))
       ;; Establish new session, applying search term.
       (unless (emptyp term)
         (refine-query term)
-        (when (emptyp *selection*)          
+        (when (emptyp *selection*)
           (htm (:p "No matches searching for \"" (esc term) "\""))))
       (unless (eq *selection* old-selection)
         (setf *session* (new-session *selection*)))
 
       ;; Present UI
       (:p (:form :method :get
-                 "Find"
+                 (write-string (if (querying-library-p) "Find: " "Refine: "))
                  (:input :type :text :name "term")
                  (:input :type :hidden
                          :name "id"
@@ -187,7 +263,7 @@
                          :controller (format nil "/search?id=~D&"
                                              (session-id *session*)))
           (htm
-           (:p "Songs matching query: " 
+           (:p "Songs matching query: "
                (write (length *selection*))))))))
 
 (define-easy-handler (page/tags :uri "/tags")
@@ -200,6 +276,17 @@
                 (unless (eql count 1)
                   (htm (format t "(~:D)" count)))
                 "  ")))))
+
+;;;; Grand unified view
+
+(define-easy-handler (page/master :uri "/")
+  ()
+  (with-html-output-to-string (*standard-output* nil :prologue t)                              
+   (:html
+    (:head (:title "Shuffletron"))
+    (:frameset :rows "96,*"
+     (:frame :name "header" :src "status" :noresize "noresize" :scrolling "no")
+     (:frame :body "main"   :src "search" :scrolling "yes")))))
 
 
 
@@ -224,8 +311,17 @@
 
 ;;;; Server setup
 
+(defvar *here*
+  (load-time-value 
+   (make-pathname :name nil :type nil :version nil
+                  :defaults (or #.*compile-file-pathname* *load-pathname*))))
+
+
 (setf *dispatch-table*
-      (list 'dispatch-easy-handlers))
+      (list 'dispatch-easy-handlers
+            (create-folder-dispatcher-and-handler "/static/" (merge-pathnames #p"static/" *here*))))
 
 (setf hunchentoot:*show-lisp-backtraces-p* t)
 (setf hunchentoot:*show-lisp-errors-p* t)
+
+;;(hunchentoot:start-server :port 4242)
