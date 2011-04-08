@@ -1,3 +1,21 @@
+* Changes in Shuffletron 0.0.5 relative to Shuffletron 0.0.4:
+** New feature: Mac OS X support
+** New feature: 'ignore' tag hides files from library/queries. To reveal ignored files, do "tagged ignore".
+** New feature: Multiple profile/library support, chosen from the command line. See --help for details.
+** New feature: 'all' command adds whole selection to queue (synonym for "+0-")
+** New feature: tagall/untagall commands, for applying tags to the entire selection.
+** New feature: 'ls' command (alias for 'show')
+** New feature: 'prescan' command toggles prescan of file before playback (needed for accurate seek, undesirably on huge files or slow filesystems)
+** Useful symbols are now exported from the SHUFFLETRON package, for the sake of hacking extensions.
+** Fix printing of dates by the alarm feature.
+** Fix directory scan on some OSes/filesystems (e.g. sshfs) where readdir doesn't provide a d_type.
+** Random command changed to choose from within the current selection, not the whole library.
+** Source code reorganization - no longer one huge sprawling file!
+
+* Changes in Shuffletron 0.0.4 relative to Shuffletron 0.0.3:
+** Correct counting of file numbers while scanning library.
+** Notes about building, and an issue with recent libmpg123 versions on 32-bit Intel.
+
 * Changes in Shuffletron 0.0.3 relative to Shuffletron 0.0.2:
 ** Binaries might really work this time
 ** New commands: killtag, qdrop, qtag, fromqueue, toqueue, random, stop, play
