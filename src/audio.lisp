@@ -12,17 +12,6 @@
 (defun audio-init ()
   (setf *mixer* (create-mixer :rate 44100)))
 
-(defun stop-command ()
-  (with-playqueue ()
-    (with-stream-control ()
-      (when *current-stream*
-        (push (song-of *current-stream*) *playqueue*)
-        (end-stream *current-stream*)))))
-
-(defun play-command ()
-  (unless (unpause)
-    (or (current-song-playing) (play-next-song))))
-
 ;;; Lock discipline: If you need both locks, take the playqueue lock first.
 ;;; This locking business is very dodgy.
 
@@ -151,3 +140,14 @@
         for song in seq
         unless (and (eql index (car list)) (pop list))
         collect song))
+
+(defun stop-command ()
+  (with-playqueue ()
+    (with-stream-control ()
+      (when *current-stream*
+        (push (song-of *current-stream*) *playqueue*)
+        (end-stream *current-stream*)))))
+
+(defun play-command ()
+  (unless (unpause)
+    (or (current-song-playing) (play-next-song))))

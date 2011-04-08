@@ -15,8 +15,6 @@
 
 (defvar *library-progress* 0)
 
-(defun emptyp (seq) (or (null seq) (zerop (length seq))))
-
 (defun smash-string (string)
   (substitute #\Space #\_ (string-downcase string)))
 

@@ -1,47 +1,5 @@
 (in-package :shuffletron)
 
-;;; Awful anaphora in these parsing macros, they often assume IN
-;;; is the name of the stream variable.
-
-(defmacro parsing ((&optional string) &body body)
-  (if string
-      `(with-input-from-string (in ,string) (catch 'fail ,@body))
-      `(catch 'fail ,@body)))
-
-;;; Beware disjunctive definitions where branches are prefixes of
-;;; later branches.  The first match will be accepted, and there's no
-;;; backtracking if that was the wrong one.
-(defmacro disjunction ((&optional string) &body branches)
-  (if string
-      `(or ,@(loop for branch in branches collect `(parsing (,string) ,branch)))
-      (let ((start (gensym)))
-        `(let ((,start (file-position in)))
-           (or ,@(loop for branch in branches
-                       collect `(progn
-                                  (assert (file-position in ,start))
-                                  (parsing (,string) ,branch))))))))
-
-;;; Parser result value: parse succeeds only when non-NIL.
-(defun val (x) (or x (throw 'fail nil)))
-
-;;; Lexical elements:
-
-(defun num (in)
-  (loop with accum = nil
-        as next = (peek-char nil in nil)
-        as digit = (and next (digit-char-p next 10))
-        while digit do
-        (read-char in)
-        (setf accum (+ digit (* (or accum 0) 10)))
-        finally (return (val accum))))
-
-(defun colon (in) (val (eql #\: (read-char in nil))))
-(defun mod60 (in) (let ((n (num in))) (val (and (< n 60) n))))
-(defun eof (in) (val (not (peek-char nil in nil))))
-(defun whitespace (in) (val (peek-char t in nil)))
-(defun match (in match)
-  (every (lambda (x) (val (char-equal x (val (read-char in nil))))) match))
-
 ;;; Temporal coupling ==> Recursive lock as workaround ==> Interesting.
 (defvar *output-lock* (bordeaux-threads:make-recursive-lock "Output Lock"))
 (defmacro with-output (() &body body)
@@ -52,6 +10,8 @@
 (defvar *term-cols* 25)
  
 (defun get-terminal-size ()
+  #-linux (values 80 25)                ; =)
+  #+linux
   (cffi:with-foreign-object (winsize :unsigned-short 4)
     (and (zerop (cffi:foreign-funcall "ioctl"
                                       :int 1        ; fd
@@ -247,11 +207,6 @@ pairs as cons cells."
                (post-number))))
 
         (terpri)))
-
-(defun show-current-query ()
-  (if (emptyp *selection*)
-      (format t "  Nothing matches the current query.~%")
-      (show-song-matches *selection* :mode :query :highlight-queue t)))
 
 (defun vector-select-ranges (vector rangespec)
   (if (emptyp vector)

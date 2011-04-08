@@ -13,24 +13,6 @@
       nil
       (list "profiles" *profile*)))
 
-(defun file (filename)
-  (with-open-file (in filename :external-format :latin1)
-    (with-standard-io-syntax ()
-      (let ((*read-eval* nil))
-        (read in)))))
-
-(defun do-write-file (filename object)
-  (with-open-file (out filename
-                       :external-format :latin1
-                       :direction :output
-                       :if-exists :supersede
-                       :if-does-not-exist :create)
-    (with-standard-io-syntax ()
-      (pprint object out))))
-
-(defsetf file (filename) (object)
-  `(do-write-file ,filename ,object))
-
 (defun subpath (list) (subseq list 0 (1- (length list))))
 
 (defun prefpath (prefname &key (profile *profile*))

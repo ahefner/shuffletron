@@ -1,10 +1,5 @@
 (in-package :shuffletron)
 
-(defparameter *shuffletron-version* "0.0.5")
-(defvar *argv* nil)
-
-(defvar *debug-mode* nil)
-
 (defvar *eval-support* 'smart
   "Whether Lisp evaluation from the Shuffletron prompt is allowed.
   May be NIL, T or 'SMART.")
@@ -63,6 +58,11 @@ type \"scanid3\". It may take a moment.~%"
      (print (eval (let ((*package* (find-package :shuffletron)))
                     (read-from-string string))))
      (terpri))
+
+(defun show-current-query ()
+  (if (emptyp *selection*)
+      (format t "  Nothing matches the current query.~%")
+      (show-song-matches *selection* :mode :query :highlight-queue t)))
 
 (defun parse-and-execute (line)
  (let* ((sepidx (position #\Space line))
