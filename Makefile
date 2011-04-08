@@ -8,12 +8,11 @@ export LD_LIBRARY_PATH=./libs/
 all:	shuffletron-bin
 
 tidy:
-	rm -f *~ *.fasl *.lx*fsl \#*\#
+	rm -f *~ *.fasl *.lx*fsl \#*\# src/*~ src/*.fasl src/*.lx*fsl src/\#*\#
 
 clean: tidy
 	rm -f shuffletron-bin shuffletron-ccl shuffletron-ccl64
 	rm -f libs/gen*
-	rm -f *~ *.fasl *.lx*fsl
 
 install:
 	install -m 0755 shuffletron shuffletron-bin $(PREFIX)/bin
