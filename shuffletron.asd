@@ -5,8 +5,8 @@
   :author "Andy Hefner <ahefner@gmail.com>"
   :license "MIT-style license"
   :depends-on (:mixalot :mixalot-mp3 :osicat)
-  :serial t
   :components ((:module src
+                :serial t
                 :components ((:file "packages")
                              (:file "util")
                              (:file "help")
