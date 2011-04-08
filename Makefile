@@ -22,7 +22,7 @@ install:
 
 .PHONY: install all clean distclean
 
-shuffletron-bin: shuffletron.lisp build-sbcl.lisp
+shuffletron-bin: build-sbcl.lisp src/*.lisp
 	$(SBCL) --noinform --no-userinit --disable-debugger \
 	        --eval "(require :asdf)" \
 	        --eval "(load \"build-sbcl.lisp\")"

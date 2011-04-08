@@ -2,7 +2,9 @@
 
 (push :shuffletron-deploy *features*)
 
+;;; Xach says never to do this:
 (load "shuffletron.asd")
+;;; (Sorry, Xach!)
 
 (asdf:oos 'asdf:compile-op :shuffletron)
 (asdf:oos 'asdf:load-op :shuffletron)
