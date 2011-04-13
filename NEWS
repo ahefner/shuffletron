@@ -1,5 +1,6 @@
 * Changes in Shuffletron 0.0.5 relative to Shuffletron 0.0.4:
 ** New feature: Mac OS X support
+** New feature: 'next' command preserves current song in loop mode, while 'skip' discards it.
 ** New feature: 'ignore' tag hides files from library/queries. To reveal ignored files, do "tagged ignore".
 ** New feature: Multiple profile/library support, chosen from the command line. See --help for details.
 ** New feature: 'all' command adds whole selection to queue (synonym for "+0-")
