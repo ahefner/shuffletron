@@ -20,7 +20,7 @@
            #:song-of #:stopped
            #:*loop-mode* #:*wakeup-time*
            #:end-stream #:finish-stream
-           #:play-song #:play-songs #:play-next-song #:skip-song
+           #:play-song #:play-songs #:add-songs #:play-next-song #:skip-song
            #:play-command #:stop-command           
            #:toggle-pause #:unpause
            #:current-song-playing

@@ -81,10 +81,17 @@ stream if successful, or NIL if the song could not be played."
     (update-status-bar)))
 
 (defun play-songs (songs)
+  "Prepend songs to the queue and play the first one immediately."
   (when-playing (stream) (end-stream stream))
   (with-playqueue ()
     (setf *playqueue* (concatenate 'list songs *playqueue*)))
   (play-next-song))
+
+(defun add-songs (songs)
+  "Append songs to queue, beginning playback if stopped."
+  (with-playqueue ()
+       (setf *playqueue* (concatenate 'list *playqueue* songs)))
+     (unless (current-song-playing) (play-next-song)))
 
 (defun skip-song ()
   (when-playing (stream) (end-stream stream))

@@ -125,11 +125,7 @@ type \"scanid3\". It may take a moment.~%"
 
     ;; Append songs and end of playqueue
     ((and (> (length line) 1) (char= #\+ (aref line 0)))
-     (with-playqueue ()
-       (setf *playqueue* (concatenate 'list
-                                      *playqueue*
-                                      (selection-songs (subseq line 1)))))
-     (unless (current-song-playing) (play-next-song)))
+     (add-songs (selection-songs (subseq line 1))))
 
     ;; Prepend songs to playqueue
     ((and (>= (length line) 4)
@@ -286,7 +282,11 @@ type \"scanid3\". It may take a moment.~%"
     ;; Randomize queue
     ((string= line "shuffle")
      (with-playqueue ()
-       (setf *playqueue* (alexandria:shuffle *playqueue*))))
+       (setf *playqueue* (alexandria:shuffle *playqueue*))))    
+
+    ;; Add/play in random order
+    ((and (string= command "shuffle") args)
+     (add-songs (alexandria:shuffle (copy-seq (selection-songs args)))))
 
     ;; Repeat the current song
     ((= 6 (or (mismatch "repeat" line) 6))
