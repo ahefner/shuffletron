@@ -64,6 +64,27 @@ type \"scanid3\". It may take a moment.~%"
       (format t "  Nothing matches the current query.~%")
       (show-song-matches *selection* :mode :query :highlight-queue t)))
 
+(defun do-seek (args)
+  (let* ((current *current-stream*)
+         (mode-char (and args (find (elt args 0) "+-")))
+         (time-arg (if mode-char
+                       (string-trim " " (subseq args 1))
+                       args))
+         (seconds (and args (parse-timespec time-arg)))
+         (samples (and seconds (* (mixer-rate *mixer*) seconds)))
+         (base (if (not mode-char)
+                   samples
+                   (and current (streamer-position current *mixer*))))
+         (offset (cond ((eql mode-char #\+) samples)
+                       ((eql mode-char #\-) (- samples))
+                       (t 0)))
+         (time (and base offset (+ base offset))))
+    (cond
+      ((null current) (format t "No song is playing.~%"))
+      ((null time) (format t "Seek to where?~%"))
+      (time (streamer-seek current *mixer* (max time 0)))
+      (t nil))))
+
 (defun parse-and-execute (line)
  (let* ((sepidx (position #\Space line))
         (command (subseq line 0 sepidx))

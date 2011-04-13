@@ -15,15 +15,6 @@
        (*   60 (prog1 (mod60 in) (colon in)))
        (*    1 (prog1 (mod60 in) (eof in))))))
 
-(defun do-seek (args)
-  (let ((current *current-stream*)
-        (time (and args (parse-timespec args))))
-    (cond
-      ((null current) (format t "No song is playing.~%"))
-      ((null time) (format t "Seek to where?~%"))
-      (time (streamer-seek current *mixer* (* (mixer-rate *mixer*) time)))
-      (t nil))))
-
 (defun 12hour (in) (let ((n (num in))) (val (and (< 0 n 13) (mod n 12)))))
 
 (defun parse-12-hour-format (in)
