@@ -6,6 +6,7 @@
 
 
 (defun init ()
+  (setf *package* (find-package :shuffletron))
   (parse-command-line-args)
   (format t "~&This is Shuffletron ~A~%" *shuffletron-version*)
   (setf *random-state* (make-random-state t))
@@ -55,8 +56,7 @@ type \"scanid3\". It may take a moment.~%"
 (defun eval* (string)
   "Read a form from STRING, evaluate it in the Shuffletron
   package and print the result."
-     (print (eval (let ((*package* (find-package :shuffletron)))
-                    (read-from-string string))))
+     (print (eval (read-from-string string)))
      (terpri))
 
 (defun show-current-query ()
@@ -121,8 +121,15 @@ type \"scanid3\". It may take a moment.~%"
                                       *playqueue*)))
      (unless (current-song-playing) (play-next-song)))
 
-    ;; Skip current song
-    ((or (string= line "next") (string= line "skip"))
+    ;; Skip current song. If looping, don't play this again.
+    ((string= line "skip")
+     (skip-song)
+     (show-current-song))
+
+    ;; Advance to next song in queue. Differs from 'skip' only if
+    ;; looping is enabled: whereas 'skip' drops the song from the
+    ;; queue, 'next' puts it at the end of the queue.
+    ((string= line "next")
      (play-next-song)
      (show-current-song))
 
@@ -275,7 +282,7 @@ type \"scanid3\". It may take a moment.~%"
     ;; Toggle loop mode
     ((string= line "loop")
      (setf *loop-mode* (not *loop-mode*))
-     (format t "~&Loop mode ~A~%" (if *loop-mode* "enabled" "disabled")))
+     (format t "Loop mode ~A~%" (if *loop-mode* "enabled" "disabled")))
 
     ;; Print current time
     ((string= line "time") (print-time))

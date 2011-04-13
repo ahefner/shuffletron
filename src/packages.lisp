@@ -15,11 +15,13 @@
            #:*selection* #:selection-history*
            #:querying-library-p #:set-selection
            #:reset-query #:refine-query #:query
-           #:with-stream-control #:with-playqueue
+           #:with-stream-control #:with-playqueue #:when-playing
            #:*mixer* #:*current-stream* #:*playqueue*
            #:song-of #:stopped
            #:*loop-mode* #:*wakeup-time*
-           #:end-stream #:play-song #:play-songs #:play-next-song
+           #:end-stream #:finish-stream
+           #:play-song #:play-songs #:play-next-song #:skip-song
+           #:play-command #:stop-command           
            #:toggle-pause #:unpause
            #:current-song-playing
            #:playqueue-and-current

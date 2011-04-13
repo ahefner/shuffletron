@@ -4,10 +4,7 @@
 
 (defclass mp3-jukebox-streamer (mp3-streamer)
   ((song :accessor song-of :initarg :song)
-   (stopped :accessor stopped :initform nil)
-   (enqueue-on-completion :accessor enqueue-on-completion
-                          :initform nil
-                          :initarg :enqueue-on-completion)))
+   (stopped :accessor stopped :initform nil)))
 
 (defun audio-init ()
   (setf *mixer* (create-mixer :rate 44100)))
@@ -15,7 +12,7 @@
 ;;; Lock discipline: If you need both locks, take the playqueue lock first.
 ;;; This locking business is very dodgy.
 
-(defvar *cslock* (bordeaux-threads:make-lock "current stream lock"))
+(defvar *cslock* (bordeaux-threads:make-lock "current stream"))
 (defvar *i-took-the-cs-look* nil)
 (defvar *current-stream* nil)
 
@@ -23,7 +20,11 @@
   `(let ((*i-took-the-cs-look* t))
      (bordeaux-threads:with-lock-held (*cslock*) ,@body)))
 
-(defvar *pqlock* (bordeaux-threads:make-lock "play queue lock"))
+(defmacro when-playing ((name) &body body)
+  `(let ((,name *current-stream*))
+     (when ,name ,@body)))
+
+(defvar *pqlock* (bordeaux-threads:make-lock "play queue"))
 (defvar *playqueue* nil)
 
 (defvar *loop-mode* nil)
@@ -46,58 +47,87 @@
   (setf *current-stream* nil)
   (update-status-bar))
 
-(defun play-song (song &key enqueue-on-completion)
-  (with-stream-control ()
-    (when *current-stream* (end-stream *current-stream*))
-    (let ((new (make-mp3-streamer (song-full-path song)
-                                  :prescan (pref "prescan" t)
-                                  :class 'mp3-jukebox-streamer
-                                  :song song
-                                  :enqueue-on-completion enqueue-on-completion))
-          (start-at (song-start-time song)))
-      (setf *current-stream* new)
-      (mixer-add-streamer *mixer* *current-stream*)
-      (when start-at
-        ;; Oh, look, another race. Great API I have here.
-        (streamer-seek new *mixer* (* start-at (mixer-rate *mixer*))))))
-  (update-status-bar))
+(defun finish-stream (stream)
+  (when *loop-mode*
+    (with-playqueue ()
+      (setf *playqueue* (append *playqueue* (list (song-of stream))))))
+  (end-stream stream))
+
+(defun play-song (song)
+  "Start a song playing, overriding the existing song. Returns the new
+stream if successful, or NIL if the song could not be played."
+  (when-playing (stream) (end-stream stream))
+  (prog1
+      (handler-case
+          (with-stream-control ()
+            (when *current-stream* (finish-stream *current-stream*))
+            (let ((new (make-mp3-streamer (song-full-path song)
+                                          :prescan (pref "prescan" t)
+                                          :class 'mp3-jukebox-streamer
+                                          :song song))
+                  (start-at (song-start-time song)))
+              (setf *current-stream* new)
+              (mixer-add-streamer *mixer* *current-stream*)
+              (when start-at
+                ;; Race conditions are fun.
+                (streamer-seek new *mixer* (* start-at (mixer-rate *mixer*))))
+              ;; Success: Return the streamer.
+              new))
+        (error (err)
+          (princ err)
+          ;; Failure: Return NIL.
+          nil))
+
+    (update-status-bar)))
 
 (defun play-songs (songs)
-  (when (> (length songs) 0)
-    (play-song (elt songs 0) :enqueue-on-completion *loop-mode*)
-    (show-current-song))
-  (when (> (length songs) 1)
-    (with-playqueue ()
-      (setf *playqueue* (concatenate 'list (subseq songs 1) *playqueue*)))))
+  (when-playing (stream) (end-stream stream))
+  (with-playqueue ()
+    (setf *playqueue* (concatenate 'list songs *playqueue*)))
+  (play-next-song))
+
+(defun skip-song ()
+  (when-playing (stream) (end-stream stream))
+  (play-next-song))
 
 (defun play-next-song ()
+  ;; If a song is playing, finish it first. This will ensure that a
+  ;; looping song is put back on the (potentially empty) queue before
+  ;; we try to pop the next song from the queue.
+  (when-playing (stream) (finish-stream stream))
   (with-playqueue ()
     (cond
       (*playqueue*
-       (let ((next (pop *playqueue*)))
-         (play-song next)
-         (when *loop-mode*
-           (setf *playqueue* (append *playqueue* (list next))))))
+       ;; Try songs from the queue until one starts successfully.
+       ;; In loop mode, songs that fail to start are dropped from the queue.
+       (loop as next = (pop *playqueue*)
+             until (or (null next) (play-song next))))
+      ;; If there's no song in the queue, finish the current song.
       (t (with-stream-control ()
-           (when *current-stream* (end-stream *current-stream*)))))))
+           (when *current-stream* (finish-stream *current-stream*)))))))
 
 (defmethod streamer-cleanup ((stream mp3-jukebox-streamer) mixer)
   (declare (ignore mixer))
   (call-next-method)
-  ;; If stopped is set, someone else can be expected to be starting up
-  ;; the next song. Otherwise, we have to do it ourselves.
+  ;; The STOPPED flag distinguishes whether playback was interrupted
+  ;; by the user, versus having reached the end of the song. If we're
+  ;; supposed to loop, this determines who is responsible for making
+  ;; that happen.
+  (when (and *loop-mode* (not (stopped stream)))
+    (with-playqueue ()
+      (setf *playqueue* (append *playqueue* (list (song-of stream))))))
+  ;; If stopped is set, someone else can be expected to start up the
+  ;; next song. Otherwise, we have to do it ourselves.
   (unless (stopped stream)
-    ;; If the song completed
-    (when (enqueue-on-completion stream)
-      (with-playqueue ()
-        (setf *playqueue* (append *playqueue* (list (song-of stream))))))
+    ;; If the song completed:    
     (with-stream-control ()
       (when (eq stream *current-stream*)
         (setf *current-stream* nil)))
     ;; We do this call in new thread, because we are in the mixer
     ;; thread here, and scanning the next file could take long enough
     ;; to stall it.
-    (bordeaux-threads:make-thread (lambda () (play-next-song)))))
+    (bordeaux-threads:make-thread
+     (lambda () (play-next-song)))))
 
 (defun toggle-pause ()
   (with-stream-control ()
@@ -114,13 +144,12 @@
         t))))
 
 (defun current-song-playing ()
-  (let ((stream *current-stream*))
-    (and stream (song-of stream))))
+  (when-playing (stream) (song-of stream)))
 
 (defun playqueue-and-current ()
-  (let ((current (current-song-playing)))
-    (if current
-        (cons current *playqueue*)
+  (let ((song (current-song-playing)))
+    (if song
+        (cons song *playqueue*)
         *playqueue*)))
 
 (defun queue-remove-songs (songs)
@@ -145,6 +174,8 @@
   (with-playqueue ()
     (with-stream-control ()
       (when *current-stream*
+        ;; Put a stopped song on the head of the queue, so that a
+        ;; subsequent 'play' will start it from the beginning.
         (push (song-of *current-stream*) *playqueue*)
         (end-stream *current-stream*)))))
 

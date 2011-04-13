@@ -7,6 +7,7 @@
 ** New feature: tagall/untagall commands, for applying tags to the entire selection.
 ** New feature: 'ls' command (alias for 'show')
 ** New feature: 'prescan' command toggles prescan of file before playback (needed for accurate seek, undesirably on huge files or slow filesystems)
+** New feature: Divergence of 'skip' versus 'next' commands within loop mode: 'next' enqueues the current song before continuing, 'skip' does not.
 ** Useful symbols are now exported from the SHUFFLETRON package, for the sake of hacking extensions.
 ** Fix printing of dates by the alarm feature.
 ** Fix directory scan on some OSes/filesystems (e.g. sshfs) where readdir doesn't provide a d_type.

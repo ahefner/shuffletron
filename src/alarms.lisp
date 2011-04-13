@@ -125,6 +125,9 @@ rather than today if the date would be less than the current time."
 
 (defvar *alarm-thread* nil)
 
+(defvar *wakeup-time* nil
+  "Time to wake up if alarm clock is enabled.")
+
 (defun trigger-alarm ()
   ;; When the alarm goes off, unpause the player if it's paused. If it
   ;; isn't paused but there are songs in the queue, play the next
