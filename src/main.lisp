@@ -56,8 +56,8 @@ type \"scanid3\". It may take a moment.~%"
 (defun eval* (string)
   "Read a form from STRING, evaluate it in the Shuffletron
   package and print the result."
-     (print (eval (read-from-string string)))
-     (terpri))
+  (print (eval (read-from-string string)))
+  (terpri))
 
 (defun show-current-query ()
   (if (emptyp *selection*)
@@ -322,10 +322,6 @@ type \"scanid3\". It may take a moment.~%"
     ;; Help: Examples
     ((and (string= command "help")
           (equalp args "examples")) (print-examples))
-
-    ;; Help: Looping
-    ((and (string= command "help")
-          (equalp args "looping")) (print-loop-help))
 
     ;; Help: Alarms
     ((and (string= command "help")

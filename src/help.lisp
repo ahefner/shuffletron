@@ -65,22 +65,30 @@ queue, use the 'queue' command:
      (3)  \"........................\"  3: You're So Gangsta
 
 Notice that  the prompt changed  from \"library>\" to  \"\9 matches>\"
-after  our initial search.  Successive searches  refine the  result of
+after our  initial search.  Successive  searches refine the  result of
 previous searches, and the prompt indicates the number of items you're
 currently searching  within. If there  had been more than  50 matches,
 they would  not be printed  by default, but  you could use  the 'show'
 command at any time to print  them. Also note that the 'queue' command
 doesn't disrupt the  current search results (this is  why numbering in
 the  queue listing is  surrounded with  parentheses, to  indicate that
-entering numbers for  playback does not refer to  them). The queue can
-be cleared with the 'clear'  command, and the 'skip' command skips the
-current song and advances to the next song in the queue.
+entering numbers for playback does not refer to them).
 
 To  add songs  to the  queue  without interrupting  the current  song,
 prefix the song list with \"+\" (to append) or \"pre\" (to prepend).
 
+The  queue can be  cleared with  the 'clear'  command, and  the 'skip'
+command skips  the current song and  advances to the next  song in the
+queue.  The 'next'  command is  similar, but  differs when  looping is
+enabled: 'next' retains the current song at the end of the queue so it
+will play again, 'skip' does not.
+
+The \"loop\" command toggles looping  mode. In looping mode, songs are
+returned to  the end of  the queue when  they finish playing,  or when
+they are bypassed using the 'next' command.
+
 When you've  completed a  search, a single  blank line  moves backward
-through the search history, allowing you to return to the \"library>\"
+through the search history, eventually returning to the \"library>\"
 prompt.
 
 If you've  imported a large  library, the ID3  tags may not  have been
@@ -95,7 +103,6 @@ there are more than 1,000 new files.
 Additional help topics:
    help commands
    help examples
-   help looping
    help alarms
 
 "))
@@ -108,10 +115,12 @@ Command list:
   show           Print search matches, highlighting songs in queue.
   back           Undo last search.
   [songs]        Play list of songs.
+  all            Play all songs in selection (equivalent to \"0-\")
   +[songs]       Append list of songs to queue.
   pre[songs]     Prepend list of songs to queue.
   random         Play a random song from the current selection.
   random QUERY   Play a random song matching QUERY
+  shuffle SONGS  Play songs in random order.
 
   queue          Print queue contents and current song playing.
   shuffle        Randomize order of songs in queue.
@@ -127,9 +136,14 @@ Command list:
   play           Resume playing
   stop           Stop playing (current song pushed to head of queue)
   pause          Toggle paused/unpaused.
-  skip           Skip currently playing song.
+  skip           Skip currently playing song. If looping is enabled, this
+                 song won't played again.
+  next           Advance to next song. If looping is enabled, the current
+                 song will be enqueued. 
   repeat N       Add N repetitions of currently playing song to head of queue.
   seek TIME      Seek to time (in [h:]m:ss format, or a number in seconds)
+  seek +TIME     Seek forward
+  seek -TIME     Seek backward
   startat TIME   Always start playback at a given time (to skip long intros)
 
   tag            List tags of currently playing song.
@@ -142,7 +156,7 @@ Command list:
   untagall TAGS  Remove given tags from all selected songs
 
   time           Print current time
-  alarm          Set alarm.
+  alarm          Set alarm (see \"help alarms\")
 
   scanid3        Scan new files for ID3 tags
   prescan        Toggle file prescanning (useful if file IO is slow)
@@ -171,33 +185,11 @@ fa t    0 Beatles, The, Abbey Road, 13: She Came In Through The Bathroom Window
 
 How to play your entire library in shuffle mode:
 
-  library> 0-            # Add open interval starting from 0 to queue
-  library> shuffle       # Shuffle the queue
-  library> skip          # It started playing before you shuffled, so skip..
+First, ensure you are at the \"library\" prompt. If the prompt reads
+differently, hit enter until it reappears.
 
-"))
+  library> shuffle 0-
 
-(defun print-loop-help ()
-  (format t "
-The \"loop\"  command toggles  looping mode. In  looping mode,  a song
-taken from the head of  the queue for playback is simultaneously added
-at the tail of the queue.
-
-Choosing a  single song to  play (interrupting the current  song) does
-not  affect  the  contents of  the  queue,  and  there's no  issue  in
-interrupting a song which you'd like to continue looping in the queue,
-because it  has already  been rotated  to the end  of the  queue. This
-behavior  allows you  to  audition  songs for  addition  to the  queue
-without disturbing its contents.  When  you've found a song you'd like
-to add the queue, you can do  it in the usual fashion, using the \"+\"
-or \"pre\" commands,  or by abusing the \"repeat\"  command (this will
-add the current song to the head of the queue).
-
-In  looping  mode, a  song  which plays  to  completion  (and was  not
-originally  started  from  the queue)  is  added  to  the end  of  the
-queue. This provides another way to extend the queue while auditioning
-songs -  if you allow the  song to play to  completion, presumably you
-want to add it to the queue.
 "))
 
 (defun print-alarm-help ()
