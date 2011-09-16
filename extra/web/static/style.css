@@ -1,0 +1,50 @@
+body {
+    background: black;
+    color: white;
+    font: 15px sans-serif;
+}
+
+h1 {
+    color: #bbb;
+}
+
+td {
+    color: white;
+    background: #282828;
+    padding: 3px 7px 3px 7px;
+}
+
+td.ARTIST {
+    background: #720;
+    vertical-align: top;
+}
+
+td.ALBUM {
+    background: #8d8030;
+    vertical-align: top;
+}
+
+td.DUMMY { 
+    background: black;
+}
+
+td.TRACK {
+    text-align: right;
+}
+
+td.TITLE {
+    background: #333;
+}
+
+td.FILENAME {
+    background: #2c2c2c;
+}
+
+td.colhead {
+    background: #444;
+}
+
+a.PlayLink {
+    color: #ffff80;
+}
+
