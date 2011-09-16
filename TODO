@@ -3,6 +3,7 @@ Features:
 * Last.fm/Scrobbling Support
 
 Bugs:
+* Search markings (underlining) not getting cleared, also wrong after navigating history
 
 Other:
 * Docs update

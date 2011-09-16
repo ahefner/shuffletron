@@ -5,13 +5,14 @@
 (eval-when (:compile-toplevel :load-toplevel :execute)
   (defparameter *jqui-theme-name* "dark-hive"))
 
-(defmacro with-html ((title) &body body)
+(defmacro with-html ((title &key refresh) &body body)
   `(with-html-output-to-string (*standard-output* nil :prologue t)
+     ,(and refresh '(:head (:meta :http-equiv "refresh" :content "2")))
      (:html
       (:head (:title ,title)
              (:link :type "text/css" :href "static/style.css" :rel "Stylesheet")
-             (:link :type "text/css" 
-                    ;; It's really stupid that jQuery UI puts the version number in the 
+             (:link :type "text/css"
+                    ;; It's really stupid that jQuery UI puts the version number in the
                     ;; CSS file name. I've renamed mine. Probably a bad idea.
                     :href (format nil "static/~A/jquery-ui.custom.css" *jqui-theme-name*)
                     :rel "Stylesheet")
@@ -35,23 +36,23 @@
                (:td (esc (format nil "~A" (song-local-path song)))))
           (:tr (:td "Position")
                (:td (format t "~A of ~A"
-                            (time->string 
-                             (round 
-                              (mixalot:streamer-position streamer *mixer*) 
+                            (time->string
+                             (round
+                              (mixalot:streamer-position streamer *mixer*)
                               (mixalot:mixer-rate *mixer*)))
                             (time->string
                              (round
                               (mixalot:streamer-length streamer *mixer*)
                               (mixalot:mixer-rate *mixer*))))))
           (when start-time
-            (htm 
+            (htm
              (:tr (:td "Skip Intro")
                   (:td (esc (time->string start-time))))))
           (flet ((field (name key)
-                   (when (getf (song-id3 song) key)
+                   (if (getf (song-id3 song) key)
                      (htm
                       (:tr (:td (esc name))
-                           (:td (esc (princ-to-string 
+                           (:td (esc (princ-to-string
                                       (getf (song-id3 song) key)))))))))
             (field "Artist"  :artist)
             (field "Album"   :album)
@@ -63,16 +64,16 @@
             (htm
              (:tr
               (:td "Tagged")
-              (:td (esc (format t "~{~A~^, ~}" 
-                                (mapcar #'decode-as-filename 
+              (:td (esc (format t "~{~A~^, ~}"
+                                (mapcar #'decode-as-filename
                                         tags)))))))))))))
 
 (defun present-songs (songs &key controls controller)
   (declare (optimize (debug 3)))
   (with-html-output (*standard-output*)
     (:table
-     (:tr      
-      (:td :class "colhead" "Artist") 
+     (:tr
+      (:td :class "colhead" "Artist")
       (:td :class "colhead" "Album")
       (when controls
         (htm (:td :class "DUMMY" "")))
@@ -85,23 +86,24 @@
            for (song . rest) on songs
            for n upfrom 0
            as id3 = (song-id3 song)
-           as prev = (vector nil nil nil nil)           
+           as prev = (vector nil nil nil nil)
            as fields = (loop for key in keys collect (getf id3 key))
            as title = (elt fields 3)
            as artist = (elt fields 0)
            as album = (elt fields 1)
            as sufficient = (and title artist)
            do
-           (htm 
+           (htm
             (:tr
              ;; Compute artist and album groupings
              (flet ((count-group (this-prop property)
-                      (loop for other in rest 
+                      (loop for other in rest
                          as other-prop = (getf (song-id3 other) property)
                          as matching = (and other-prop (string-equal other-prop this-prop))
                          summing (if matching 1 0) into num-matches
                          until (not matching)
                          finally
+                         (format *trace-output* "~&   TD ~A  rowspan ~D~%" property (1+ num-matches))
                          (htm (:td :class (symbol-name property) :rowspan (1+ num-matches)
                                    (esc this-prop)))
                          (return num-matches)))
@@ -109,37 +111,41 @@
                       (cond
                         ((eql 0 count) nil)
                         ((null count) nil)
-                        (t (1- count)))))
-               (when (and artist (not artist-group-len))
-                 (setf artist-group-len (count-group artist :artist)))
-               (when (and album (not album-group-len))
-                 (setf album-group-len (count-group album :album)))
+                        (t (1- count))))
+                    (draw-playback-control ()
+                      (when controls
+                        (htm
+                         (:td
+                          (:a :href (format nil "~Aplay=~D" controller n)
+                              :class "PlayLink"
+                              (:img :src "static/play.png" :alt "Play")))))))
+
+
+               (format *trace-output* "~&artist \"~A\" album \"~A\" album group len:~D~%" artist album album-group-len)
+
+               (when (or artist album)
+                 (when (not artist-group-len)
+                   (setf artist-group-len (count-group artist :artist)))
+
+                 (when (not album-group-len)
+                   (setf album-group-len (count-group album :album))))
+
                (setf artist-group-len (update-count artist-group-len))
-               (setf album-group-len (update-count album-group-len)))
-             ;; Output HTML             
-             (cond 
-               ((not sufficient)
-                (htm (:td :class "FILENAME" :colspan 5 (esc (song-local-path song)))))
-               (t
-                (flet ((col (class prop)
-                         (htm (:td :class class (esc (princ-to-string (or prop "")))))))                  
-                  ;; Playback column
-                  (when controls
-                    (htm
-                     (:td
-                      (:a :href (format nil "~Aplay=~D" controller n)
-                          :class "PlayLink"
-                          (:img :src "static/play.png" :alt "Play")))))
-                  (col "TRACK" (elt fields 2))
-                  (col "TITLE" (elt fields 3))
-                  (col "GENRE" (elt fields 4)))
-                #+NIL
-                (loop for field in (cddr fields)
-                   for key in (cddr keys) do
-                   (htm
-                    (:td :class (symbol-name key)
-                         (esc (princ-to-string (or field ""))))))))))
-           ))))
+               (setf album-group-len (update-count album-group-len))
+
+               (draw-playback-control)
+
+               (cond
+                 ((not sufficient)
+
+                  (htm (:td :class "FILENAME" :colspan 5 (esc (song-local-path song)))))
+                 (t
+                  (flet ((col (class prop)
+                           (htm (:td :class class (esc (princ-to-string (or prop "")))))))
+
+                    (col "TRACK" (elt fields 2))
+                    (col "TITLE" (elt fields 3))
+                    (col "GENRE" (elt fields 4))))))))))))
 
 (defun present-playqueue ()
   (with-playqueue ()
@@ -153,7 +159,7 @@
     ()
   (let* ((current *current-stream*)
          (song (and current (song-of current))))
-    (with-html ("Shuffletron")
+    (with-html ("Shuffletron" :refresh t)
       (cond
         (song
          (present-song song :streamer current))
@@ -166,7 +172,7 @@
          ;;(queue-size (with-playqueue () (length *playqueue*)))
          (song (and current (song-of current)))
          (id3 (and song (song-id3 song))))
-    (with-html ("Shuffletron Status")
+    (with-html ("Shuffletron Status" :refresh t)
       (cond
         ((not song) (htm (:div "No song playing.")))
         (song
@@ -230,6 +236,7 @@
     (term ;;tagged
      (id   :parameter-type 'integer)
      (play :parameter-type 'integer))
+
   (let* ((*session*   (ensure-session id))
          (*selection* (songs-of *session*))
          (old-selection *selection*)
@@ -261,6 +268,7 @@
                  (:input :type :hidden
                          :name "id"
                          :value 0)))
+
       (if (< (length *selection*) 500)
           (present-songs (coerce *selection* 'list) :controls t
                          :controller (format nil "/search?id=~D&"
@@ -284,7 +292,7 @@
 
 (define-easy-handler (page/master :uri "/")
   ()
-  (with-html-output-to-string (*standard-output* nil :prologue t)                              
+  (with-html-output-to-string (*standard-output* nil :prologue t)
    (:html
     (:head (:title "Shuffletron"))
     (:frameset :rows "96,*"
@@ -315,7 +323,7 @@
 ;;;; Server setup
 
 (defvar *here*
-  (load-time-value 
+  (load-time-value
    (make-pathname :name nil :type nil :version nil
                   :defaults (or #.*compile-file-pathname* *load-pathname*))))
 
