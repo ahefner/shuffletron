@@ -236,11 +236,14 @@
          (play-song (safe-vref *selection* play)))
     (when play-song (play-song play-song))
     (format *trace-output* "----- SEARCH ~A ~A" term play)
+
+    ;; Establish new session, applying search term.
+    (unless (emptyp term)
+      (refine-query term))
+
     (with-html ("Shuffletron")
       (:h1 (write-string (if (querying-library-p) "Search Library" "Search Results")))
-      ;; Establish new session, applying search term.
       (unless (emptyp term)
-        (refine-query term)
         (when (emptyp *selection*)
           (htm (:p "No matches searching for \"" (esc term) "\""))))
       (unless (eq *selection* old-selection)
