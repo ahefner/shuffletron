@@ -103,7 +103,6 @@
                          summing (if matching 1 0) into num-matches
                          until (not matching)
                          finally
-                         (format *trace-output* "~&   TD ~A  rowspan ~D~%" property (1+ num-matches))
                          (htm (:td :class (symbol-name property) :rowspan (1+ num-matches)
                                    (esc this-prop)))
                          (return num-matches)))
@@ -119,9 +118,6 @@
                           (:a :href (format nil "~Aplay=~D" controller n)
                               :class "PlayLink"
                               (:img :src "static/play.png" :alt "Play")))))))
-
-
-               (format *trace-output* "~&artist \"~A\" album \"~A\" album group len:~D~%" artist album album-group-len)
 
                (when (or artist album)
                  (when (not artist-group-len)
