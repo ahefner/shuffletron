@@ -2,9 +2,18 @@
 
 (defvar *mixer* nil)
 
-(defclass mp3-jukebox-streamer (mp3-streamer)
+(defclass shuffletron-stream-mixin ()
   ((song :accessor song-of :initarg :song)
    (stopped :accessor stopped :initform nil)))
+
+;;; Should use a proxy approach, so we don't have to define N
+;;; subclasses.  Won't work without some small changes to Mixalot -
+;;; presently, a proxying stream can't tell when the proxied stream is
+;;; finished. Fix later.
+
+(defclass shuffletron-mp3-stream  (mixalot-mp3:mp3-streamer shuffletron-stream-mixin) ())
+(defclass shuffletron-ogg-stream  (mixalot-vorbis:vorbis-streamer shuffletron-stream-mixin) ())
+(defclass shuffletron-flac-stream (mixalot-flac:flac-streamer shuffletron-stream-mixin) ())
 
 (defun audio-init ()
   (setf *mixer* (create-mixer :rate 44100)))
@@ -53,6 +62,22 @@
       (setf *playqueue* (append *playqueue* (list (song-of stream))))))
   (end-stream stream))
 
+(defun make-streamer (song)
+  (ecase (music-file-type (song-full-path song))
+    (:mp3  (mixalot-mp3:make-mp3-streamer
+            (song-full-path song)
+            :class 'shuffletron-mp3-stream
+            :song song
+            :prescan (pref "prescan" t)))
+    (:ogg  (mixalot-vorbis:make-vorbis-streamer
+            (song-full-path song)
+            :class 'shuffletron-ogg-stream
+            :song song))
+    (:flac (mixalot-flac:make-flac-streamer
+            (song-full-path song)
+            :class 'shuffletron-flac-stream
+            :song song))))
+
 (defun play-song (song)
   "Start a song playing, overriding the existing song. Returns the new
 stream if successful, or NIL if the song could not be played."
@@ -61,10 +86,7 @@ stream if successful, or NIL if the song could not be played."
       (handler-case
           (with-stream-control ()
             (when *current-stream* (finish-stream *current-stream*))
-            (let ((new (make-mp3-streamer (song-full-path song)
-                                          :prescan (pref "prescan" t)
-                                          :class 'mp3-jukebox-streamer
-                                          :song song))
+            (let ((new (make-streamer song))
                   (start-at (song-start-time song)))
               (setf *current-stream* new)
               (mixer-add-streamer *mixer* *current-stream*)
@@ -113,9 +135,9 @@ stream if successful, or NIL if the song could not be played."
       (t (with-stream-control ()
            (when *current-stream* (finish-stream *current-stream*)))))))
 
-(defmethod streamer-cleanup ((stream mp3-jukebox-streamer) mixer)
+
+(defmethod streamer-cleanup :after ((stream shuffletron-stream-mixin) mixer)
   (declare (ignore mixer))
-  (call-next-method)
   ;; The STOPPED flag distinguishes whether playback was interrupted
   ;; by the user, versus having reached the end of the song. If we're
   ;; supposed to loop, this determines who is responsible for making
@@ -126,7 +148,7 @@ stream if successful, or NIL if the song could not be played."
   ;; If stopped is set, someone else can be expected to start up the
   ;; next song. Otherwise, we have to do it ourselves.
   (unless (stopped stream)
-    ;; If the song completed:    
+    ;; If the song completed:
     (with-stream-control ()
       (when (eq stream *current-stream*)
         (setf *current-stream* nil)))

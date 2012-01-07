@@ -1,5 +1,5 @@
 (defpackage :shuffletron
-  (:use :common-lisp :mixalot :mixalot-mp3)
+  (:use :common-lisp :mixalot)
   (:nicknames :shuf)
   (:export #:run #:*shuffletron-version*
            #:emptyp
@@ -21,7 +21,7 @@
            #:*loop-mode* #:*wakeup-time*
            #:end-stream #:finish-stream
            #:play-song #:play-songs #:add-songs #:play-next-song #:skip-song
-           #:play-command #:stop-command           
+           #:play-command #:stop-command
            #:toggle-pause #:unpause
            #:current-song-playing
            #:playqueue-and-current

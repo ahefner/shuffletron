@@ -7,4 +7,4 @@ Bugs:
 
 Other:
 * Docs update
-* Vorbis support?
+* Verify Ogg/FLAC support works on non-Linux platforms, conditionalize them if there are problems.

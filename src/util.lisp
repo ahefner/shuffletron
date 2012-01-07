@@ -71,6 +71,11 @@
 
 (defun emptyp (seq) (or (null seq) (zerop (length seq))))
 
+(defun build-sequence-table (seq &optional (key #'identity) (test #'equal))
+  (let ((table (make-hash-table :test test)))
+    (map nil (lambda (elt) (setf (gethash (funcall key elt) table) elt)) seq)
+    table))
+
 ;;;; S-Expression File I/O Accessor
 
 (defun file (filename)

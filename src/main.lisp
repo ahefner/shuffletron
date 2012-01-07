@@ -26,7 +26,7 @@
           (code-char 13) (length *library*))
   (load-tags)
   (compute-filtered-library)
-  (load-id3-cache)
+  (load-metadata-cache)
   (reset-query)
   ;; Scan tags of new files automatically, unless there's a ton of them.
   (let ((need (songs-needing-id3-scan)))
@@ -36,7 +36,7 @@
        (format t "~:D new songs need to be scanned for ID3 tags. To do this now,
 type \"scanid3\". It may take a moment.~%"
                (songs-needing-id3-scan)))
-      (t (scan-id3-tags :verbose t :adjective "new ")))))
+      (t (scan-file-metadata :verbose t :adjective "new ")))))
 
 (defun spooky-init ()
   (let ((stream #+sbcl (sb-sys:make-fd-stream 1 :external-format :latin1 :output t :input nil)
@@ -332,12 +332,12 @@ type \"scanid3\". It may take a moment.~%"
 
     ;; Scan new ID3 tags
     ((string= line "scanid3")
-     (scan-id3-tags :verbose t))
+     (scan-file-metadata :verbose t))
 
     ;; Clear and rescan ID3 tags
     ((string= line "rescanid3")
      (loop for song across *library* do (setf (song-id3-p song) nil))
-     (scan-id3-tags :verbose t))
+     (scan-file-metadata :verbose t))
 
     ;; Attempt to start swank server, for development.
     ((string= line "swankme")

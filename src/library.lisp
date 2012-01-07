@@ -10,8 +10,13 @@
 (defun init-library ()
   (setf *library* (make-array 0 :fill-pointer 0 :adjustable t)))
 
-(defun mp3-p (filename)
-  (not (mismatch filename "mp3" :test #'char-equal :start1 (- (length filename) 3))))
+(defun match-extension (filename extension)
+  (not (mismatch filename extension :test #'char-equal :start1 (- (length filename) (length extension)))))
+
+(defun music-file-type (filename)
+  (or (and (match-extension filename "mp3") :mp3)
+      (and (match-extension filename "ogg") :ogg)
+      (and (match-extension filename "flac") :flac)))
 
 (defvar *library-progress* 0)
 
@@ -20,7 +25,7 @@
 
 (defun carriage-return () (format t "~C" (code-char 13)))
 
-(defun add-mp3-file (full-filename relative-filename)
+(defun add-song-file (full-filename relative-filename)
   (let ((song (make-song :full-path full-filename
                          :local-path relative-filename
                          :smashed (smash-string relative-filename)
@@ -34,18 +39,18 @@
     (when (probe-file path)
       (walk path
             (lambda (filename)
-              (when (mp3-p filename)
+              (when (music-file-type filename)
                 (incf *library-progress*)
                 (when (zerop (mod *library-progress* 10))
                   (carriage-return)
                   (format t "Scanning. ~:D files.." *library-progress*)
                   (force-output))
-                (add-mp3-file filename (rel path filename)))))
+                (add-song-file filename (rel path filename)))))
       t)))
 
 (defun songs-needing-id3-scan () (count-if-not #'song-id3-p *library*))
 
-(defun save-id3-cache ()
+(defun save-metadata-cache ()
   (setf (pref "id3-cache")
         (map 'vector (lambda (song) (list (song-local-path song)
                                           (song-id3-p song)
@@ -53,15 +58,22 @@
              *library*))
   (values))
 
-(defun load-id3-cache ()
+(defun load-metadata-cache ()
   (loop for (name id3-p id3) across (pref "id3-cache" #())
         as song = (gethash name *local-path->song*)
         when (and song id3-p)
         do (setf (song-id3-p song) t
                  (song-id3 song) id3)))
 
-(defun scan-id3-tags (&key verbose adjective)
-  (format t "~&Scanning ID3 tags (~D).~%" (songs-needing-id3-scan))
+(defun get-song-metadata (absolute-path)
+  (case (music-file-type absolute-path)
+    (:mp3  (mpg123:get-tags-from-file absolute-path :no-utf8 t))
+    ;; FIXME: Audit OGG/FLAC paths for unicode insanity.
+    (:ogg  (vorbisfile:get-vorbis-tags-from-file absolute-path))
+    (:flac (flac:get-flac-tags-from-file absolute-path))))
+
+(defun scan-file-metadata (&key verbose adjective)
+  (format t "~&Scanning file metadata (~:D files).~%" (songs-needing-id3-scan))
   (when verbose (fresh-line))
   (loop with pending = (and verbose (songs-needing-id3-scan))
         with n = 1
@@ -71,18 +83,13 @@
           (carriage-return)
           (format t "Reading ~Atags: ~:D of ~:D" (or adjective "") n pending)
           (force-output))
-        (setf (song-id3 song) (mpg123:get-tags-from-file (song-full-path song) :no-utf8 t)
+        (setf (song-id3 song) (get-song-metadata (song-full-path song))
               (song-matchprops song) nil
               (song-id3-p song) t)
         (incf n)
         finally
         (when (and pending (not (zerop pending))) (terpri)))
-  (save-id3-cache))
-
-(defun build-sequence-table (seq &optional (key #'identity) (test #'equal))
-  (let ((table (make-hash-table :test test)))
-    (map nil (lambda (elt) (setf (gethash (funcall key elt) table) elt)) seq)
-    table))
+  (save-metadata-cache))
 
 (defun compute-filtered-library ()
   (setf *filtered-library* (remove-if (lambda (song) (find "ignore" (song-tags song) :test #'string=)) *library*)))
