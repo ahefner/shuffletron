@@ -8,19 +8,14 @@
 
 (defvar *profile* "default")
 
-(defun profile-path-component ()
-  (if (equal *profile* "default")
-      nil
-      (list "profiles" *profile*)))
-
 (defun subpath (list) (subseq list 0 (1- (length list))))
 
 (defun prefpath (prefname &key (profile *profile*))
   (let ((name (if (listp prefname) (car (last prefname)) prefname))
-        (subpath (if (listp prefname) (subpath prefname) nil))
+        (subpath (if (listp prefname) (butlast prefname) nil))
         (*profile* profile))
     (merge-pathnames
-     (make-pathname :directory `(:relative ".shuffletron" ,@(profile-path-component) ,@(mapcar #'string subpath))
+     (make-pathname :directory `(:relative ".shuffletron" "profiles" ,*profile* ,@(mapcar #'string subpath))
                     :name (and name (string name)))
      (user-homedir-pathname))))
 
@@ -39,14 +34,12 @@
   (setf (file (prefpath name)) value))
 
 (defun all-profiles ()
-  (append
-   (and (probe-file (prefpath "library-base" :profile "default")) '("default"))
-   (mapcar (lambda (x) (car (last (pathname-directory x))))
-           (directory
-            (merge-pathnames
-             (make-pathname :directory '(:relative ".shuffletron" "profiles" :wild-inferiors)
-                            :name "library-base")
-             (user-homedir-pathname))))))
+  (mapcar (lambda (x) (car (last (pathname-directory x))))
+          (directory
+           (merge-pathnames
+            (make-pathname :directory '(:relative ".shuffletron" "profiles" :wild-inferiors)
+                           :name "library-base")
+            (user-homedir-pathname)))))
 
 (defun get-profile-base (profile-name)
   (let ((*profile* profile-name))
