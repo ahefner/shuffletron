@@ -45,7 +45,7 @@
                   (carriage-return)
                   (format t "Scanning. ~:D files.." *library-progress*)
                   (force-output))
-                (add-song-file filename (rel path filename)))))
+                (add-song-file filename (relative-to path filename)))))
       t)))
 
 (defun songs-needing-id3-scan () (count-if-not #'song-id3-p *library*))

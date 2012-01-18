@@ -2,7 +2,7 @@
 
 ;;;; File names
 
-(defun dfn (a b)
+(defun join-paths (a b)
   "Append a file name to a path, adding a directory separator if necessary."
   (declare (type string a b))
   (if (and (char= #\/ (elt a (1- (length a))))
@@ -10,8 +10,8 @@
       a
       (concatenate 'string a (if (char= #\/ (elt a (1- (length a)))) "" "/") b)))
 
-(defun rel (path filename)
-  (let ((index (mismatch (dfn path "") filename)))
+(defun relative-to (path filename)
+  (let ((index (mismatch (join-paths path "") filename)))
     (if (zerop index)
 	(error "File ~A is not in path ~A" filename path)
         (subseq filename index))))
@@ -24,7 +24,7 @@
 
 (defun find-type-via-stat (path name)
   ;; Call stat, map back to d_type form since that's what we expect.
-  (let ((mode (osicat-posix:stat-mode (osicat-posix:stat (dfn path name)))))
+  (let ((mode (osicat-posix:stat-mode (osicat-posix:stat (join-paths path name)))))
     (cond
       ((osicat-posix:s-isdir mode) osicat-posix:dt-dir)
       ((osicat-posix:s-isreg mode) osicat-posix:dt-reg)
@@ -56,7 +56,7 @@
 (defun abs-sorted-list-directory (path)
   (multiple-value-bind (dirs files) (split-list-directory path)
       (flet ((absolutize (list)
-               (mapcar (lambda (filename) (dfn path filename))
+               (mapcar (lambda (filename) (join-paths path filename))
                        (sort list #'string<=))))
         (values (absolutize dirs) (absolutize files)))))
 

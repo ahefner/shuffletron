@@ -14,7 +14,7 @@
         (init-library)
         (unless *library-base*
           (format t "~&Enter library path: ")
-          (setf *library-base* (dfn (getline) "")))
+          (setf *library-base* (join-paths (getline) "")))
         (when (not (library-scan *library-base*))
           (format t "Unable to scan \"~A\"~%" *library-base*)
           (setf *library-base* nil))
