@@ -20,11 +20,6 @@
   (set-selection (copy-seq *filtered-library*) :record nil)
   (loop for x across *library* do (setf (song-matchprops x) nil)))
 
-(defmacro any (&body forms)
-  "Similar to the OR macro, but doesn't short-circuit."
-  (let ((syms (loop repeat (length forms) collect (gensym "ANY"))))
-    `((lambda ,syms (or ,@syms)) ,@forms)))
-
 (defun do-query (substring update-highlighting)
   (declare (optimize (speed 3)))
   ;; Query and update highlighting:

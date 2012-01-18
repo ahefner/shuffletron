@@ -1,6 +1,6 @@
 (in-package :shuffletron)
 
-;;;; Experimental status bar code:
+;;;; Experimental status bar plugin:
 
 (defun save-cursor ()    (format t "~C[s" #\Esc))
 (defun restore-cursor () (format t "~C[u" #\Esc))
@@ -18,11 +18,6 @@
 (defvar *funcounter* 0)
 (defvar *waitcounter* 0)
 (defvar *donecounter* 0)
-
-(defun update-status-bar ()
-  ;; The status bar is now disabled.
-  ;; To enable it, call DISPLAY-STATUS-BAR here.
-  (values))
 
 (defun display-status-bar ()
   (with-output ()
@@ -84,3 +79,30 @@
   (incf *donecounter*))
 
 ;;; How the hell does a little status bar take that much code to paint?
+
+(defclass status-bar () ())
+
+(defmethod extending-display-prompt :after ((app status-bar))
+  (display-status-bar))
+
+(defmethod extending-wait-for-alarm :after ((app status-bar) interval)
+  (declare (ignore interval))
+  (display-status-bar))
+
+(defmethod extending-toggle-pause :after ((app status-bar))
+  (display-status-bar))
+
+(defmethod extending-unpause :after ((app status-bar))
+  (display-status-bar))
+
+(defmethod extending-play-song :after ((app status-bar) song)
+  (declare (ignore song))
+  (display-status-bar))
+
+(defmethod extending-end-stream :after ((app status-bar) stream)
+  (declare (ignore stream))
+  (display-status-bar))
+
+
+
+

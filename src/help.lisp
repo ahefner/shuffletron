@@ -8,7 +8,7 @@
    --help           Display this message
 "))
 
-(defun print-help ()
+(defun-extensible print-help ()
   (format t "
 Shuffletron  is a text-mode  music player  oriented around  search and
 tagging. Its principle of operation  is simple: search for songs, then
@@ -104,10 +104,9 @@ Additional help topics:
    help commands
    help examples
    help alarms
-
 "))
 
-(defun print-commands ()
+(defun-extensible print-commands ()
   (format t "
 Command list:
 
@@ -139,7 +138,7 @@ Command list:
   skip           Skip currently playing song. If looping is enabled, this
                  song won't played again.
   next           Advance to next song. If looping is enabled, the current
-                 song will be enqueued. 
+                 song will be enqueued.
   repeat N       Add N repetitions of currently playing song to head of queue.
   seek TIME      Seek to time (in [h:]m:ss format, or a number in seconds)
   seek +TIME     Seek forward

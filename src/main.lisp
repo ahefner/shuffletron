@@ -4,6 +4,10 @@
   "Whether Lisp evaluation from the Shuffletron prompt is allowed.
   May be NIL, T or 'SMART.")
 
+;;; Presently, this class is just used for the plugin
+;;; framework. Migrating application state into this is a project for
+;;; another day.
+(defclass shuffletron () ())
 
 (defun init ()
   (setf *package* (find-package :shuffletron))
@@ -152,8 +156,7 @@ type \"scanid3\". It may take a moment.~%"
 
     ;; Pause playback
     ((string= line "pause")
-     (toggle-pause)
-     (update-status-bar))
+     (toggle-pause))
 
     ;; Stop
     ((string= line "stop")
@@ -282,7 +285,7 @@ type \"scanid3\". It may take a moment.~%"
     ;; Randomize queue
     ((string= line "shuffle")
      (with-playqueue ()
-       (setf *playqueue* (alexandria:shuffle *playqueue*))))    
+       (setf *playqueue* (alexandria:shuffle *playqueue*))))
 
     ;; Add/play in random order
     ((and (string= command "shuffle") args)
@@ -357,39 +360,48 @@ playback, and is useful for slow disks or network file systems.~%")))
     ;; ???
     (t (format t "Unknown command ~W. Try 'help'.~%" line)))))
 
-(defun mainloop ()
-  (loop
+(defun-extensible redisplay ()
    ;; Show the current query, if there aren't too many items:
    (when (and *selection-changed* (<= (length *selection*) *max-query-results*))
      (show-current-query))
-   (setf *selection-changed* nil)
-   ;;(update-status-bar)
-   ;; Prompt
-   (with-output ()
-     (format t "~A> " (if (querying-library-p)
-                          "library"
-                          (format nil "~:D matches" (length *selection*))))
-     (force-output))
+   (setf *selection-changed* nil))
+
+(defun-extensible read-command ()
+  (prog1 (getline)
+    ;; Make sure this is correct before printing output.
+    (update-terminal-size)))
+
+(defun-extensible display-prompt ()
+  (format t "~A> " (if (querying-library-p)
+                       "library"
+                       (format nil "~:D matches" (length *selection*)))))
+
+(defun protect (function)
+  (if *debug-mode*
+      (funcall function)
+      (handler-case (funcall function)
+        (error (c)
+          (with-output ()
+            (format t "~&Oops: ~A~%" c))))))
+
+(defun mainloop ()
+  (loop
+   (redisplay)
+   (with-output () (display-prompt))
    ;; Input
-   (let ((line (getline)))
-     (flet ((cmd ()
-              (with-output ()
-                (update-terminal-size)
-                (parse-and-execute (string-trim " " line)))))
-       (if *debug-mode*
-           (cmd)
-           (handler-case (cmd)
-             (error (c)
-               (with-output ()
-                 (format t "~&Oops! ~A~%" c)))))))))
+   (protect
+    (lambda () (parse-and-execute (string-trim " " (read-command)))))))
 
 (defun run ()
   (spooky-init)
   (mixalot:main-thread-init)
+  (setf *application* (make-instance 'shuffletron))
   ;; (Don't) Clear the screen first:
   #+ONSECONDTHOUGHT (format t "~C[2J~C[1;1H" #\Esc #\Esc)
   #+SBCL (setf *argv* (rest sb-ext:*posix-argv*))
   #-SBCL (warn "*argv* not implemented for this CL implementation.")
   (init)
   (audio-init)
-  (mainloop))
+  (mainloop)
+  ;; Shut down plugins:
+  (apply-configuration *application* nil))

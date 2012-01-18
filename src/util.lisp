@@ -76,6 +76,11 @@
     (map nil (lambda (elt) (setf (gethash (funcall key elt) table) elt)) seq)
     table))
 
+(defmacro any (&body forms)
+  "Similar to the OR macro, but doesn't short-circuit."
+  (let ((syms (loop repeat (length forms) collect (gensym "ANY"))))
+    `((lambda ,syms (or ,@syms)) ,@forms)))
+
 ;;;; S-Expression File I/O Accessor
 
 (defun file (filename)

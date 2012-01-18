@@ -9,6 +9,7 @@
                 :serial t
                 :components ((:file "packages")
                              (:file "util")
+                             (:file "plugin-framework")
                              (:file "global")
                              (:file "help")
                              (:file "profiles")

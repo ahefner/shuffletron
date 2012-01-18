@@ -119,7 +119,7 @@ rather than today if the date would be less than the current time."
 (defvar *wakeup-time* nil
   "Time to wake up if alarm clock is enabled.")
 
-(defun trigger-alarm ()
+(defun-extensible trigger-alarm ()
   ;; When the alarm goes off, unpause the player if it's paused. If it
   ;; isn't paused but there are songs in the queue, play the next
   ;; song. If the queue is empty, queue up ten random songs and play
@@ -131,6 +131,9 @@ rather than today if the date would be less than the current time."
         (loop repeat 10 do (push (alexandria:random-elt *filtered-library*) *playqueue*))))
     (play-next-song)))
 
+(defun-extensible wait-for-alarm (interval)
+  (sleep interval))
+
 (defun alarm-thread-toplevel ()
   (unwind-protect
        (loop with interval = 60
@@ -138,10 +141,9 @@ rather than today if the date would be less than the current time."
              as remaining = (and wakeup (- wakeup (get-universal-time)))
              do
              (cond
-               ((null wakeup) (sleep interval))
+               ((null wakeup) (wait-for-alarm interval))
                ((<= remaining 0) (trigger-alarm))
-               (t (sleep (min remaining interval))
-                  (update-status-bar))))
+               (t (wait-for-alarm (min remaining interval)))))
     (setf *alarm-thread* nil)))
 
 (defun set-alarm (utime)

@@ -4,11 +4,12 @@
 (defvar *output-lock* (bordeaux-threads:make-recursive-lock "Output Lock"))
 (defmacro with-output (() &body body)
   `(bordeaux-threads:with-recursive-lock-held (*output-lock*)
-     ,@body))
+     (multiple-value-prog1 ,@body
+       (force-output))))
 
 (defvar *term-rows* 80)
 (defvar *term-cols* 25)
- 
+
 (defun get-terminal-size ()
   #-linux (values 80 25)                ; =)
   #+linux

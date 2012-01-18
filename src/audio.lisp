@@ -49,12 +49,11 @@
        #+CCL (ccl:print-call-history :detailed-p nil))
      ,@body))
 
-(defun end-stream (stream)
+(defun-extensible end-stream (stream)
   ;; TODO: Fade out nicely.
   (setf (stopped stream) t)
   (mixer-remove-streamer *mixer* stream)
-  (setf *current-stream* nil)
-  (update-status-bar))
+  (setf *current-stream* nil))
 
 (defun finish-stream (stream)
   (when *loop-mode*
@@ -78,7 +77,7 @@
             :class 'shuffletron-flac-stream
             :song song))))
 
-(defun play-song (song)
+(defun-extensible play-song (song)
   "Start a song playing, overriding the existing song. Returns the new
 stream if successful, or NIL if the song could not be played."
   (when-playing (stream) (end-stream stream))
@@ -98,9 +97,7 @@ stream if successful, or NIL if the song could not be played."
         (error (err)
           (princ err)
           ;; Failure: Return NIL.
-          nil))
-
-    (update-status-bar)))
+          nil))))
 
 (defun play-songs (songs)
   "Prepend songs to the queue and play the first one immediately."
@@ -158,14 +155,14 @@ stream if successful, or NIL if the song could not be played."
     (bordeaux-threads:make-thread
      (lambda () (play-next-song)))))
 
-(defun toggle-pause ()
+(defun-extensible toggle-pause ()
   (with-stream-control ()
     (when *current-stream*
       (if (streamer-paused-p *current-stream* *mixer*)
           (streamer-unpause *current-stream* *mixer*)
           (streamer-pause *current-stream* *mixer*)))))
 
-(defun unpause ()
+(defun-extensible unpause ()
   (with-stream-control ()
     (when *current-stream*
       (when (streamer-paused-p *current-stream* *mixer*)
