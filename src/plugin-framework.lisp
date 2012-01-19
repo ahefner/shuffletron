@@ -119,5 +119,5 @@
 (defun enable-plugin (plugin-name &rest initargs)
   (apply 'application-enable-plugin *application* plugin-name initargs))
 
-(defun disable-plugin (plugin-name &rest initargs)
-  (apply 'application-disable-plugin *application* plugin-name initargs))
+(defun disable-plugin (plugin-name)
+  (application-disable-plugin *application* plugin-name))
