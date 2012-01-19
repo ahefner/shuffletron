@@ -2,7 +2,7 @@
   (:use :common-lisp :mixalot)
   (:export #:run #:*shuffletron-version*
            #:emptyp
-           #:walk #:rel #:dfn
+           #:walk #:relative-to #:join-paths
            #:*profile* #:pref #:prefpath
            #:*library* #:*filtered-library* #:*library-base*
            #:song #:song-full-path #:song-local-path #:song-tags
