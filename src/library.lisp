@@ -66,11 +66,12 @@
                  (song-id3 song) id3)))
 
 (defun get-song-metadata (absolute-path)
-  (case (music-file-type absolute-path)
-    (:mp3  (mpg123:get-tags-from-file absolute-path :no-utf8 t))
-    ;; FIXME: Audit OGG/FLAC paths for unicode insanity.
-    (:ogg  (vorbisfile:get-vorbis-tags-from-file absolute-path))
-    (:flac (flac:get-flac-tags-from-file absolute-path))))
+  (ignore-errors                        ; I'm a bad person.
+   (case (music-file-type absolute-path)
+     (:mp3  (mpg123:get-tags-from-file absolute-path :no-utf8 t))
+     ;; FIXME: Audit OGG/FLAC paths for unicode insanity.
+     (:ogg  (vorbisfile:get-vorbis-tags-from-file absolute-path))
+     (:flac (flac:get-flac-tags-from-file absolute-path)))))
 
 (defun scan-file-metadata (&key verbose adjective)
   (format t "~&Scanning file metadata (~:D files).~%" (songs-needing-id3-scan))
