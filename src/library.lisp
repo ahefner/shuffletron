@@ -14,9 +14,9 @@
   (not (mismatch filename extension :test #'char-equal :start1 (- (length filename) (length extension)))))
 
 (defun music-file-type (filename)
-  (or (and (match-extension filename "mp3") :mp3)
-      (and (match-extension filename "ogg") :ogg)
-      (and (match-extension filename "flac") :flac)))
+  (or (and (match-extension filename ".mp3") :mp3)
+      (and (match-extension filename ".ogg") :ogg)
+      (and (match-extension filename ".flac") :flac)))
 
 (defvar *library-progress* 0)
 
