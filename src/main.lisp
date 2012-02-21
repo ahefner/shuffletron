@@ -42,7 +42,7 @@ type \"scanid3\". It may take a moment.~%"
                (songs-needing-id3-scan)))
       (t (scan-file-metadata :verbose t :adjective "new ")))))
 
-(defun spooky-init ()
+(defun lowlevel-init ()
   (let ((stream #+sbcl (sb-sys:make-fd-stream 1 :external-format :latin1 :output t :input nil)
                 #+ccl (ccl::make-fd-stream 1 :direction :io :sharing :lock :encoding :iso-8859-1)))
     (setf *standard-output* stream)
@@ -393,11 +393,15 @@ playback, and is useful for slow disks or network file systems.~%")))
     (lambda () (parse-and-execute (string-trim " " (read-command)))))))
 
 (defun run ()
-  (spooky-init)
+  ;; Initialize IO streams, signal handlers, etc.
+  (lowlevel-init)
+  ;; Audio initialization. Necessary for Mac OS (see the Mixalot manual).
   (mixalot:main-thread-init)
+  ;; Set *application* globally rather than binding it, so it's
+  ;; visible in all threads.  Not ideal, but whatever.
   (setf *application* (make-instance 'shuffletron))
   ;; (Don't) Clear the screen first:
-  #+ONSECONDTHOUGHT (format t "~C[2J~C[1;1H" #\Esc #\Esc)
+  #+(or) (format t "~C[2J~C[1;1H" #\Esc #\Esc)
   #+SBCL (setf *argv* (rest sb-ext:*posix-argv*))
   #-SBCL (warn "*argv* not implemented for this CL implementation.")
   (init)

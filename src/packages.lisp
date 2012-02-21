@@ -50,6 +50,8 @@
            #:play-song #:extending-play-song
            #:end-stream #:extending-end-stream
 
+           #:note-audio-written #:extending-note-audio-written
+
            ;; Help functions (for extension by plugins)
            #:print-commands
            #:print-help

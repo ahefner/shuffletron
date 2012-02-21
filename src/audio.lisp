@@ -6,6 +6,15 @@
   ((song :accessor song-of :initarg :song)
    (stopped :accessor stopped :initform nil)))
 
+(defstruct (shuffletron-mixer (:include mixalot:mixer)))
+
+(defmethod mixalot:mixer-note-write
+    ((mixer shuffletron-mixer) buffer offset size)
+  (note-audio-written buffer offset size))
+
+(defun-extensible note-audio-written (buffer offset size)
+  (declare (ignore buffer offset size)))
+
 ;;; Should use a proxy approach, so we don't have to define N
 ;;; subclasses.  Won't work without some small changes to Mixalot -
 ;;; presently, a proxying stream can't tell when the proxied stream is
@@ -16,7 +25,15 @@
 (defclass shuffletron-flac-stream (mixalot-flac:flac-streamer shuffletron-stream-mixin) ())
 
 (defun audio-init ()
-  (setf *mixer* (create-mixer :rate 44100)))
+  (setf *mixer* (create-mixer :rate 44100
+                              :constructor 'make-shuffletron-mixer)))
+
+(defun ensure-mixer ()
+  (cond
+    ((or (null *mixer*)
+         (mixer-shutdown-flag *mixer*))
+     (audio-init))
+    (t *mixer*)))
 
 ;;; Lock discipline: If you need both locks, take the playqueue lock first.
 ;;; This locking business is very dodgy.
@@ -81,23 +98,23 @@
   "Start a song playing, overriding the existing song. Returns the new
 stream if successful, or NIL if the song could not be played."
   (when-playing (stream) (end-stream stream))
-  (prog1
-      (handler-case
-          (with-stream-control ()
-            (when *current-stream* (finish-stream *current-stream*))
-            (let ((new (make-streamer song))
-                  (start-at (song-start-time song)))
-              (setf *current-stream* new)
-              (mixer-add-streamer *mixer* *current-stream*)
-              (when start-at
-                ;; Race conditions are fun.
-                (streamer-seek new *mixer* (* start-at (mixer-rate *mixer*))))
-              ;; Success: Return the streamer.
-              new))
-        (error (err)
-          (princ err)
-          ;; Failure: Return NIL.
-          nil))))
+  (ensure-mixer)
+  (handler-case
+      (with-stream-control ()
+        (when *current-stream* (finish-stream *current-stream*))
+        (let ((new (make-streamer song))
+              (start-at (song-start-time song)))
+          (setf *current-stream* new)
+          (mixer-add-streamer *mixer* *current-stream*)
+          (when start-at
+            ;; Race conditions are fun.
+            (streamer-seek new *mixer* (* start-at (mixer-rate *mixer*))))
+          ;; Success: Return the streamer.
+          new))
+    (error (err)
+      (princ err)
+      ;; Failure: Return NIL.
+      nil)))
 
 (defun play-songs (songs)
   "Prepend songs to the queue and play the first one immediately."
