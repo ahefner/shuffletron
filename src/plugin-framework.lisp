@@ -25,14 +25,12 @@
 
 (defgeneric plugin-enabled (application plugin-name &rest initargs &key &allow-other-keys)
   (:documentation "Notification that a plugin has just been enabled. Plugin initialization methods must EQL-specialize on the PLUGIN-NAME argument. ")
-  (:method-combination progn)
-  (:method progn (application plugin-name &rest initargs)
+  (:method (application plugin-name &rest initargs)
     (declare (ignore plugin-name initargs))))
 
 (defgeneric plugin-disabled (application plugin-name)
   (:documentation "Notification that a plugin is about to be disabled. Plugin initialization methods must EQL-specialize on the PLUGIN-NAME argument. ")
-  (:method-combination progn)
-  (:method progn (application plugin-name)
+  (:method (application plugin-name)
     (declare (ignore application plugin-name))))
 
 (defun enabled-plugins (application)
