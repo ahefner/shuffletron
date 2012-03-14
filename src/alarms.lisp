@@ -49,7 +49,6 @@ clock. Returns time in minutes from midnight."
   (multiple-value-bind (second minute hour date month year day)
       (decode-universal-time utime)
     (declare (ignore second))
-    (print month)
     (format nil "~A ~A ~D ~D:~2,'0D ~A ~D"
             (nth day '("Mon" "Tue" "Wed" "Thu" "Fri" "Sat" "Sun"))
             (nth (1- month) '("Jan" "Feb" "Mar" "Apr" "May" "Jun" "Jul" "Aug" "Sep" "Oct" "Nov" "Dec"))
