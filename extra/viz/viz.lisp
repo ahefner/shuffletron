@@ -24,6 +24,10 @@
   (declare (type circular-index x y))
   (logand (1- +cb-length+) (+ x y)))
 
+(defvar *viz-window* nil)
+
+(defclass viz-wakeup (window-event) ())
+
 ;;; Separate this state from the application object, to lessen the
 ;;; odds that we burn off the Earth's atmosphere if disable-plugin
 ;;; fires at the wrong instant. Wouldn't want that.
@@ -34,21 +38,30 @@
                           :element-type 'mixalot:stereo-sample
                           :adjustable nil
                           :fill-pointer nil))
+
    (high-water-mark :initform 0 :accessor high-water-mark)
-   (fft-input :accessor fft-input
-              :initform (make-array +fft-size+
-                                    :element-type 'napa-fft:real-sample
-                                    :adjustable nil
-                                    :fill-pointer nil))
-   (spectrum :accessor spectrum
-             :initform (make-array +fft-size+
-                                   :element-type 'napa-fft:complex-sample
-                                   :adjustable nil
-                                   :fill-pointer nil))
+
+   (fft-input
+    :accessor fft-input
+    :initform (make-array +fft-size+
+                          :element-type 'napa-fft:real-sample
+                          :adjustable nil
+                          :fill-pointer nil))
+   (spectrum
+    :accessor spectrum
+    :initform (make-array +fft-size+
+                          :element-type 'napa-fft:complex-sample
+                          :adjustable nil
+                          :fill-pointer nil))
+   (displayed-spectrum
+    :accessor displayed-spectrum
+    :initform (make-array +fft-size+
+                          :element-type 'napa-fft:complex-sample
+                          :adjustable nil
+                          :fill-pointer nil))
+
    (texture :accessor texture :initform nil)
-
    (dirty :accessor dirty :initform t)
-
    (shutdown-flag :initform nil :accessor shutdown-flag)))
 
 (defclass viz ()
@@ -67,7 +80,9 @@
           (setf (aref cbuffer out-dex) (aref buffer in-dex)
                 dirty t)
           finally
-          (setf high-water-mark (logand mask (+ high-water-mark size))))))
+          (setf high-water-mark (logand mask (+ high-water-mark size)))
+          (when *viz-window*
+            (send *viz-window* (make-instance 'viz-wakeup) :fail 'identity)))))
 
 (defvar *vs*)
 
@@ -78,7 +93,10 @@
            (type double-float freq))
   ;; 7.39705*10**9*f**4/ ( (f+129.4)**2 * (f+676.7) * (f+4636) * (f+76655)**2)
   (/ (* 7.39705d9 (* freq freq freq freq))
-     (* (expt (+ freq 129.4) 2)  (+ freq 676.7)  (+ freq 4636)  (expt (+ freq 76655) 2))))
+     (* (expt (+ freq 129.4) 2)
+        (+ freq 676.7)
+        (+ freq 4636)
+        (expt (+ freq 76655) 2))))
 
 (defun compute-spectrum (&optional (vs *vs*))
   (declare (optimize (speed 2)))
@@ -127,78 +145,40 @@
     (values)))
 
 (defun draw-spectrum (vs)
-  (compute-spectrum vs)
-  (let ((spectrum  (the napa-fft:complex-sample-array (spectrum vs))))
+  (let ((spectrum  (the napa-fft:complex-sample-array (spectrum vs)))
+        (dspectrum (displayed-spectrum vs)))
     (gl:color 1.0 1.0 1.0)
     (gl:begin :line-strip)
     (loop with width = (/ +fft-size+ 2)
           for i from 0 below width
-          for x = -1.0d0 then (+ x (/ 2.0d0 width))
+          for x = -0.98d0 then (+ x (/ 1.96d0 width))
           ;; Linear
-          ;;as y = (+ -0.9d0 (* 0.1d0 (abs (aref spectrum i))))
+          ;;as y = (+ -0.9d0 (* 0.1d0 (abs (aref dspectrum i))))
           ;; Logarithmic
           as y = (+ -0.9d0 (* 0.7 (log (+ 1.0 (abs (aref spectrum i))))))
           do
-          (gl:vertex x y 0.0d0))
+          (setf (aref dspectrum i)
+                (expt-approach (aref dspectrum i)
+                               y
+                               :rate 1d-7
+                               :threshold 0.001))
+          (gl:vertex x (realpart (aref dspectrum i)) 0.0d0))
     (gl:end)
-    (gl:check-error)
+    (gl:check-error)))
 
-    ;; Ensure texture
-    ;; (delete this, does nothing anyway, library changed underneath it)
-    #+NIL
-    (with-slots (texture) vs
-      (unless texture
-        (setf texture
-              (make-instance 'playpen::basic-mirrored-source
-                             :image (playpen:image-matrix
-                                     playpen:+rgba+
-                                     :width 256
-                                     :height 256))))
-      (gl:check-error)
-      ;; ?
-      ;;(playpen::realize-texture-surface texture)
-
-      (gl:check-error)
-      ;(gl:enable :texture-2d)
-      ;(gl:bind-texture :texture-2d (playpen::texture-id texture))
-      (gl:matrix-mode :modelview)
-      (gl:load-identity)
-      #+NIL
-      (gl:scale (pwin:window-width *window*)
-                (pwin:window-height *window*)
-                1.0)
-      (gl:disable :blend)
-      (gl:color 0.0 1.0 0.0 1.0)
-      (gl:begin :quads)
-      (gl:vertex 0 0)
-      (gl:vertex 1 0)
-      (gl:vertex 1 1)
-      (gl:vertex 0 1)
-      (gl:end)
-      (gl:check-error))
-
-    ;; !
-    (values)))
-
-(defclass viz-window (window)
+(defclass viz-window (window time-consumer)
   ((vs :initarg :vs))
   (:default-initargs
    :application-name "Shuffletron"
    :title "Visualizer"))
 
 (defmethod handle-event ((window viz-window) (event expose))
+  (setf *viz-window* window)
   (let ((*vs* (slot-value window 'vs)))
    (with-graphics-context (window)
-     (gl:matrix-mode :modelview)
-     (gl:load-identity)
-     (gl:translate 0.0 0.0 0.0)
-     (gl:matrix-mode :projection)
-     (gl:load-identity)
-     (gl:clear-color 0.4 0.17 0.17 1.0)
-     (gl:clear :color-buffer-bit)
-     (gl:disable :blend)
-     (gl:disable :texture-2d)
-     (gl:check-error)
+     ;;(use-graphic-projection)
+     (reset-transforms)
+     (clear-screen #(0.4 0.17 0.17 0.8))
 
      (gl:enable :line-smooth)           ; Enable antialiased lines.
      (gl:line-width 1.0)
@@ -212,32 +192,15 @@
 
      (draw-spectrum *vs*)
 
-
      (gl:check-error))))
 
-(defmethod animating ((window viz-window))
-  t)
+(defmethod handle-event ((window viz-window) (event viz-wakeup))
+  (with-slots (vs) window
+    (compute-spectrum vs))
+  (animate))
 
 (defun launch-viz (vs)
   (run-app 'viz-window :vs vs))
-
-#+NIL
-(defun launch-viz (vs)
-  (pwin:initialize-display)
-  (let ((*window* (pwin:create-window
-                   :application-name "Shuffletron ?!?"))
-        (*vs* vs)
-        (playpen::*opengl-owner* 'funcall)) ; Really?
-   (unwind-protect
-        (loop while
-              (and
-               (not (shutdown-flag vs))
-               (nth-value
-                1
-                (with-simple-restart (retry "Retry runstep")
-                  (viz-runstep)))))
-     ;; Cleanup:
-     (pwin:destroy-window *window*))))
 
 (defmethod plugin-enabled
     (shuffletron (plugin (eql 'viz)) &rest initargs &key &allow-other-keys)
