@@ -10,7 +10,8 @@
 
 (defmethod mixalot:mixer-note-write
     ((mixer shuffletron-mixer) buffer offset size)
-  (note-audio-written buffer offset size))
+  (with-simple-restart (ignore "Ignore this error.")
+    (note-audio-written buffer offset size)))
 
 (defun-extensible note-audio-written (buffer offset size)
   (declare (ignore buffer offset size)))
