@@ -4,24 +4,33 @@
   "Whether Lisp evaluation from the Shuffletron prompt is allowed.
   May be NIL, T or 'SMART.")
 
+(defun configure-library-path ()
+  "Prompt user and verify library path"
+  (init-library)
+  (block nil
+    (let ((path *library-base*))          ;??
+      (unless *library-base*
+        (format t "~&Enter library path: ")
+        (setf *library-base* (join-paths (getline) "")))
+      (when (and *library-base* (null (probe-file *library-base*)))
+        (format t "~&Can't open directory ~A~%" *library-base*)
+        (return))
+      (when (and *library-base* (not (library-scan *library-base*)))
+        (format t "Unable to scan \"~A\"~%" *library-base*)
+        (return))
+      (when (emptyp *library*)
+        (format t "No playable files found in \"~A\"~%" *library-base*))
+      ;; Success!
+      path)))
 
 (defun init ()
   (setf *package* (find-package :shuffletron))
   (parse-command-line-args)
   (format t "~&This is Shuffletron ~A~%" *shuffletron-version*)
   (setf *random-state* (make-random-state t))
-  (loop do
-        (init-library)
-        (unless *library-base*
-          (format t "~&Enter library path: ")
-          (setf *library-base* (join-paths (getline) "")))
-        (when (not (library-scan *library-base*))
-          (format t "Unable to scan \"~A\"~%" *library-base*)
-          (setf *library-base* nil))
-        (when (emptyp *library*)
-          (format t "No playable files found in \"~A\"~%" *library-base*)
-          (setf *library-base* nil))
-        until *library-base*)
+  (loop
+     do (setf *library-base* (configure-library-path))
+     until *library-base*)
   (format t "~CLibrary contains ~:D files.        ~%"
           (code-char 13) (length *library*))
   (load-tags)

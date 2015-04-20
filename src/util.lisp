@@ -32,20 +32,23 @@
 
 (defun %split-list-directory (path)
   (with-posix-interface ()
-    (let ((dir (osicat-posix:opendir path))
-          dirs files)
-      (unwind-protect
-	   (loop
-            (multiple-value-bind (name type) (osicat-posix:readdir dir)
-              ;; Some OSes (and ancient glibc versions) don't support
-              ;; d_type. We fall back to stat in that case.
-              (when (and name (eql type osicat-posix:dt-unknown))
-                (setf type (find-type-via-stat path name)))
-              (cond
-                ((null name) (return-from %split-list-directory (values dirs files)))
-                ((eql type osicat-posix:dt-dir) (push name dirs))
-                ((eql type osicat-posix:dt-reg) (push name files)))))
-	(osicat-posix:closedir dir)))))
+    (handler-case
+        (let ((dir (osicat-posix:opendir path))
+              dirs files)
+          (unwind-protect
+               (loop
+                  (multiple-value-bind (name type) (osicat-posix:readdir dir)
+                    ;; Some OSes (and ancient glibc versions) don't support
+                    ;; d_type. We fall back to stat in that case.
+                    (when (and name (eql type osicat-posix:dt-unknown))
+                      (setf type (find-type-via-stat path name)))
+                    (cond
+                      ((null name) (return-from %split-list-directory (values dirs files)))
+                      ((eql type osicat-posix:dt-dir) (push name dirs))
+                      ((eql type osicat-posix:dt-reg) (push name files)))))
+            (osicat-posix:closedir dir)))
+      (osicat-posix:EACCES ()
+        (cerror "Skip it" "Skip scan of ~A" path)))))
 
 (defun split-list-directory (path)
   (multiple-value-bind (dirs files) (%split-list-directory path)
