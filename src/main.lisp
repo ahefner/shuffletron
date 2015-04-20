@@ -1,9 +1,5 @@
 (in-package :shuffletron)
 
-(defvar *eval-support* 'smart
-  "Whether Lisp evaluation from the Shuffletron prompt is allowed.
-  May be NIL, T or 'SMART.")
-
 (defun configure-library-path ()
   "Prompt user and verify library path"
   (init-library)
@@ -108,10 +104,10 @@ type \"scanid3\". It may take a moment.~%"
        (t (reset-query))))
 
     ;; Lisp evaluation
-    ((and *eval-support* (string= command "eval"))
+    ((string= command "eval")
      (eval* args))
 
-    ((and (eq *eval-support* 'smart) (equal (subseq line 0 1) "("))
+    ((equal (subseq line 0 1) "(")
      (eval* line))
 
     ;; Input starting with a forward slash refines the current query.
@@ -291,7 +287,7 @@ type \"scanid3\". It may take a moment.~%"
     ;; Randomize queue
     ((string= line "shuffle")
      (with-playqueue ()
-       (setf *playqueue* (alexandria:shuffle *playqueue*))))    
+       (setf *playqueue* (alexandria:shuffle *playqueue*))))
 
     ;; Add/play in random order
     ((and (string= command "shuffle") args)
