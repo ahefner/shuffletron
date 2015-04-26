@@ -5,10 +5,12 @@
 (defun join-paths (a b)
   "Append a file name to a path, adding a directory separator if necessary."
   (declare (type string a b))
-  (if (and (char= #\/ (elt a (1- (length a))))
-	   (zerop (length b)))
-      a
-      (concatenate 'string a (if (char= #\/ (elt a (1- (length a)))) "" "/") b)))
+  (cond
+    ((zerop (length a)) b)
+    ((and (char= #\/ (elt a (1- (length a))))
+          (zerop (length b)))
+     a)
+    (t (concatenate 'string a (if (char= #\/ (elt a (1- (length a)))) "" "/") b))))
 
 (defun relative-to (path filename)
   (let ((index (mismatch (join-paths path "") filename)))

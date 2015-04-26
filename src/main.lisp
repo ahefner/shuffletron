@@ -4,20 +4,22 @@
   "Prompt user and verify library path"
   (init-library)
   (block nil
-    (let ((path *library-base*))          ;??
-      (unless *library-base*
-        (format t "~&Enter library path: ")
-        (setf *library-base* (join-paths (getline) "")))
-      (when (and *library-base* (null (probe-file *library-base*)))
-        (format t "~&Can't open directory ~A~%" *library-base*)
-        (return))
-      (when (and *library-base* (not (library-scan *library-base*)))
-        (format t "Unable to scan \"~A\"~%" *library-base*)
-        (return))
-      (when (emptyp *library*)
-        (format t "No playable files found in \"~A\"~%" *library-base*))
-      ;; Success!
-      path)))
+    (let ((path *library-base*))
+     (unless (and (stringp path)
+                  (> (length path) 0))
+       (format t "~&Enter library path: ")
+       (setf path (join-paths (getline) "")))
+     (when (and path (null (probe-file path)))
+       (format t "~&Can't open directory ~A~%" path)
+       (return))
+     (setf path (osicat-sys:native-namestring (probe-file path)))
+     (when (and path (not (library-scan path)))
+       (format t "Unable to scan \"~A\"~%" path)
+       (return))
+     (when (emptyp *library*)
+       (format t "No playable files found in \"~A\"~%" path))
+     ;; Success!
+     path)))
 
 (defun init ()
   (setf *package* (find-package :shuffletron))
