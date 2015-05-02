@@ -57,7 +57,7 @@ type \"scanid3\". It may take a moment.~%"
 (defun quit ()
 ;;  (format t "Bye.~%")
   (finish-output)
-  #+sbcl (sb-ext:exit)
+  #+sbcl (sb-ext:exit :abort t)
   #+ccl (ccl:quit))
 
 (defun eval* (string)
