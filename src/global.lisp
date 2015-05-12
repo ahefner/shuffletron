@@ -2,7 +2,8 @@
 
 ;;;; Global state, related macros, whatever.
 
-(defparameter *shuffletron-version* "0.0.5")
+(defparameter *shuffletron-version*
+  (asdf:component-version (asdf:find-system "shuffletron")))
 
 (defvar *argv* nil)
 (defvar *debug-mode* nil)
