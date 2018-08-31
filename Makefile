@@ -1,9 +1,21 @@
-SBCL=sbcl
-CCL=ccl
-CCL64=ccl64
+SBCL?=sbcl
+CCL?=ccl
+CCL64?=ccl64
+
+# Note: If you edit the install prefix, you may also have to edit the
+# 'shuffletron' wrapper script so it can find its libraries.
+
 PREFIX=/usr/local
 
-export LD_LIBRARY_PATH=./libs/
+# I preferred to build it with --no-userinit so as not to pull in
+# unspecified random junk, but this is the easiest way to make it work
+# with Quicklisp.
+
+# SBCLFLAGS=--noinform --no-userinit
+
+SBCLFLAGS?=--noinform
+
+export LD_LIBRARY_PATH=$(CURDIR)/libs/
 
 all:	shuffletron-bin
 
@@ -22,7 +34,7 @@ install:
 .PHONY: install all clean distclean
 
 shuffletron-bin: build-sbcl.lisp src/*.lisp
-	$(SBCL) --noinform --no-userinit --disable-debugger \
+	$(SBCL) $(SBCLFLAGS) --disable-debugger \
 	        --eval "(require :asdf)" \
 	        --eval "(load \"build-sbcl.lisp\")"
 
