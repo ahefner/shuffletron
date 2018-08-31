@@ -51,8 +51,11 @@ type \"scanid3\". It may take a moment.~%"
     (setf *standard-output* stream)
     (setf *error-output*    stream)
     #+sbcl
-    (sb-sys:enable-interrupt sb-unix:sigint
-      (lambda (&rest args) (declare (ignore args)) (sb-ext:exit)))))
+    (sb-sys:enable-interrupt
+     sb-unix:sigint
+     (lambda (&rest args)
+       (declare (ignore args))
+       (sb-ext:exit :abort t)))))
 
 (defun quit ()
 ;;  (format t "Bye.~%")
