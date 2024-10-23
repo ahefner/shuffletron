@@ -45,7 +45,7 @@
   `(bordeaux-threads:with-lock-held (*pqlock*)
      (when *i-took-the-cs-look*
        (format t "~&You took the PQ lock inside the CS lock. Don't do that.~%")
-       #+SBCL (sb-debug:backtrace)
+       #+SBCL (sb-debug:print-backtrace)
        #+CCL (ccl:print-call-history :detailed-p nil))
      ,@body))
 
